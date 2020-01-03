@@ -25,6 +25,7 @@ pub trait GameEngine {
     fn state(&self) -> GameState;
 }
 
+#[derive(PartialEq)]
 pub enum GameState {
     PendingEffect,
     PendingDecision,
@@ -50,7 +51,7 @@ impl<T: GameData> Engine<T> {
     pub fn new(num_players: usize, data: T) -> Self {
         Self {
             num_players,
-            state: Self::fetch_decision(&data),
+            state: Self::fetch_decision(num_players, &data),
             effects: VecDeque::new(),
             data,
         }
@@ -60,9 +61,16 @@ impl<T: GameData> Engine<T> {
         &self.data
     }
 
-    fn fetch_decision(data: &T) -> InternalState<T> {
+    fn fetch_decision(num_players: usize, data: &T) -> InternalState<T> {
         match data.next_decision() {
-            Some(dec) => InternalState::PendingDecision(dec),
+            Some(dec) => {
+                assert!(
+                    dec.player() < num_players,
+                    "Illegal player for decision: {:?}",
+                    dec.player()
+                );
+                InternalState::PendingDecision(dec)
+            }
             None => InternalState::Finished,
         }
     }
@@ -86,7 +94,7 @@ impl<T: GameData> GameEngine for Engine<T> {
                     .apply(&mut self.data);
 
                 if self.effects.is_empty() {
-                    self.state = Self::fetch_decision(self.data());
+                    self.state = Self::fetch_decision(self.num_players, self.data());
                 }
             }
             InternalState::PendingDecision(decision) => {
