@@ -3,5 +3,5 @@ mod tgp;
 
 pub use self::tgp::*;
 
-pub mod engine_a;
-pub mod engine_b;
+pub mod board;
+pub mod engine;
