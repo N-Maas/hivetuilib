@@ -1,7 +1,7 @@
 use std::{
+    fmt::Debug,
     iter,
     iter::FromIterator,
-    fmt::Debug,
     marker::PhantomData,
     ops::{Index, IndexMut},
     vec::IntoIter,
@@ -169,6 +169,36 @@ impl<'a, T, B: Index<usize, Output = T>> Clone for Field<'a, T, B> {
 
 impl<'a, T, B: Index<usize, Output = T>> Copy for Field<'a, T, B> {}
 
+impl<'a, T, S, B: Board<T, Structure = S>> Field<'a, T, B>
+where
+    S: AdjacencyStructure<B>,
+{
+    pub fn is_adjacent_to(&self, index: usize) -> bool {
+        self.board
+            .structure()
+            .is_adjacent(self.board, self.index, index)
+    }
+
+    pub fn is_adjacent(&self, other: &Self) -> bool {
+        self.is_adjacent_to(other.index)
+    }
+
+    pub fn neighbor_count(&self) -> usize {
+        self.board
+            .structure()
+            .neighbor_count(self.board, self.index)
+    }
+
+    pub fn get_neighbors(&self) -> impl Iterator<Item = Field<'a, T, B>> {
+        let board = self.board;
+        board
+            .structure()
+            .get_neighbors(board, self.index)
+            .into_iter()
+            .map(move |i| Self::new(board, i))
+    }
+}
+
 // TOOD rather bad hack to enable mutable iteration
 pub trait MutAccess {
     type Content;
@@ -177,7 +207,17 @@ pub trait MutAccess {
     fn mut_ref_vec<'a>(&'a mut self) -> Vec<&'a mut Self::Content>;
 }
 
-// ----- implementations -----
+// ----- structure traits -----
+
+pub trait AdjacencyStructure<B> {
+    fn is_adjacent(&self, board: &B, i: usize, j: usize) -> bool;
+
+    fn neighbor_count(&self, board: &B, field: usize) -> usize;
+
+    fn get_neighbors(&self, board: &B, field: usize) -> Vec<usize>;
+}
+
+// ----- board implementations -----
 
 #[derive(Debug, Clone)]
 pub struct LinearBoard<T> {
