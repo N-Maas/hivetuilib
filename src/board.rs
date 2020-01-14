@@ -13,8 +13,6 @@ use std::{
 pub trait Board<T>:
     IndexMut<usize, Output = T>
     + MutAccess<Content = T>
-    // bad hack (?)
-    + Sized
 {
     type Structure;
 
@@ -85,7 +83,7 @@ macro_rules! implBoardIntoIter {
             fn $call(self) -> Self::IntoIter;
         }
 
-        impl<'a, T, B: Board<T>> $trait<T> for &'a B
+        impl<'a, T, B: Board<T> + ?Sized> $trait<T> for &'a B
         where
             T: 'a,
         {
@@ -101,13 +99,13 @@ macro_rules! implBoardIntoIter {
             }
         }
 
-        pub struct $name<'a, T, B: Board<T>> {
+        pub struct $name<'a, T, B: Board<T> + ?Sized> {
             board: &'a B,
             current: usize,
             _f: PhantomData<T>,
         }
 
-        impl<'a, T, B: Board<T>> Iterator for $name<'a, T, B>
+        impl<'a, T, B: Board<T> + ?Sized> Iterator for $name<'a, T, B>
         where
             T: 'a,
         {
@@ -137,13 +135,13 @@ implBoardIntoIter!(BoardIntoFieldIter for FieldIter, into_field_iter, Field<'a, 
 implBoardIntoIter!(BoardIntoIter for BoardIter, into_iter, &'a T, index);
 
 #[derive(Debug)]
-pub struct Field<'a, T, B: Index<usize, Output = T>> {
+pub struct Field<'a, T, B: Index<usize, Output = T> + ?Sized> {
     board: &'a B,
     index: usize,
     _t: PhantomData<T>,
 }
 
-impl<'a, T, B: Index<usize, Output = T>> Field<'a, T, B> {
+impl<'a, T, B: Index<usize, Output = T> + ?Sized> Field<'a, T, B> {
     pub fn new(board: &'a B, index: usize) -> Self {
         Self {
             board,
@@ -161,15 +159,15 @@ impl<'a, T, B: Index<usize, Output = T>> Field<'a, T, B> {
     }
 }
 
-impl<'a, T, B: Index<usize, Output = T>> Clone for Field<'a, T, B> {
+impl<'a, T, B: Index<usize, Output = T> + ?Sized> Clone for Field<'a, T, B> {
     fn clone(&self) -> Self {
         Field { ..*self }
     }
 }
 
-impl<'a, T, B: Index<usize, Output = T>> Copy for Field<'a, T, B> {}
+impl<'a, T, B: Index<usize, Output = T> + ?Sized> Copy for Field<'a, T, B> {}
 
-impl<'a, T, S, B: Board<T, Structure = S>> Field<'a, T, B>
+impl<'a, T, S, B: Board<T, Structure = S> + ?Sized> Field<'a, T, B>
 where
     S: AdjacencyStructure<B>,
 {
@@ -209,7 +207,7 @@ pub trait MutAccess {
 
 // ----- structure traits -----
 
-pub trait AdjacencyStructure<B> {
+pub trait AdjacencyStructure<B: ?Sized> {
     fn is_adjacent(&self, board: &B, i: usize, j: usize) -> bool;
 
     fn neighbor_count(&self, board: &B, field: usize) -> usize;
