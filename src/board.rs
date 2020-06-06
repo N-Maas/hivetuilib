@@ -1,5 +1,11 @@
 use std::{
-    fmt::Debug, iter, iter::FromIterator, marker::PhantomData, ops::Index, ops::IndexMut,
+    collections::HashSet,
+    fmt::Debug,
+    hash::Hash,
+    iter,
+    marker::PhantomData,
+    ops::IndexMut,
+    ops::{Add, Index},
     vec::IntoIter,
 };
 
@@ -144,6 +150,44 @@ pub struct Index2D {
 
 impl BoardIdxType for Index2D {}
 
+pub mod directions {
+    use super::*;
+
+    pub enum Offset {
+        Neg(usize),
+        Pos(usize),
+    }
+
+    fn apply_offset(n: usize, offset: Offset) -> Option<usize> {
+        match offset {
+            Offset::Pos(offset) => n.checked_add(offset),
+            Offset::Neg(offset) => n.checked_sub(offset),
+        }
+    }
+
+    impl Add<Offset> for Index1D {
+        type Output = Option<Self>;
+
+        fn add(self, other: Offset) -> Option<Self> {
+            apply_offset(self.val, other).map(|val| Self::from(val))
+        }
+    }
+
+    impl Add<(Offset, Offset)> for Index2D {
+        type Output = Option<Self>;
+
+        fn add(self, other: (Offset, Offset)) -> Option<Self> {
+            let new_x = apply_offset(self.x, other.0);
+            let new_y = apply_offset(self.y, other.1);
+
+            match (new_x, new_y) {
+                (Some(x), Some(y)) => Some(Self { x, y }),
+                _ => None,
+            }
+        }
+    }
+}
+
 // ----- field implementation -----
 
 #[derive(Debug, Eq, Copy)]
@@ -238,103 +282,111 @@ pub trait NeighborhoodyStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
 
 // ----- board implementations -----
 
-#[derive(Debug, Clone)]
-pub struct VecBoard<T, S = ()> {
-    content: Vec<T>,
-    structure: S,
-}
+pub mod boards {
+    use super::*;
 
-impl<T: Clone, S> VecBoard<T, S> {
-    pub fn from_default(count: usize, def: T, structure: S) -> Self {
-        VecBoard {
-            content: vec![def; count],
-            structure,
+    #[derive(Debug, Clone)]
+    pub struct VecBoard<T, S = ()> {
+        content: Vec<T>,
+        structure: S,
+    }
+
+    impl<T: Clone, S> VecBoard<T, S> {
+        pub fn from_default(count: usize, def: T, structure: S) -> Self {
+            VecBoard {
+                content: vec![def; count],
+                structure,
+            }
         }
     }
-}
 
-impl<T: Default, S> VecBoard<T, S> {
-    pub fn with_default(count: usize, structure: S) -> Self {
-        VecBoard {
-            content: iter::repeat_with(|| Default::default())
-                .take(count)
-                .collect(),
-            structure,
+    impl<T: Default, S> VecBoard<T, S> {
+        pub fn with_default(count: usize, structure: S) -> Self {
+            VecBoard {
+                content: iter::repeat_with(|| Default::default())
+                    .take(count)
+                    .collect(),
+                structure,
+            }
         }
     }
-}
 
-// TODO: builder
+    // TODO: builder
 
-impl<T, S> Index<Index1D> for VecBoard<T, S> {
-    type Output = T;
+    impl<T, S> Index<Index1D> for VecBoard<T, S> {
+        type Output = T;
 
-    fn index(&self, index: Index1D) -> &Self::Output {
-        self.content.index(index.val)
-    }
-}
-
-impl<T, S> IndexMut<Index1D> for VecBoard<T, S> {
-    fn index_mut(&mut self, index: Index1D) -> &mut Self::Output {
-        self.content.index_mut(index.val)
-    }
-}
-
-impl<T, S> BoardIndex<Index1D> for VecBoard<T, S> {
-    fn all_indices(&self) -> Vec<Index1D> {
-        (0..self.content.len())
-            .map(|val| Index1D::from(val))
-            .collect()
-    }
-}
-
-impl<T, S> Board<Index1D> for VecBoard<T, S> {
-    type Structure = S;
-
-    fn size(&self) -> usize {
-        self.content.len()
+        fn index(&self, index: Index1D) -> &Self::Output {
+            self.content.index(index.val)
+        }
     }
 
-    fn contains(&self, index: Index1D) -> bool {
-        index.val < self.size()
+    impl<T, S> IndexMut<Index1D> for VecBoard<T, S> {
+        fn index_mut(&mut self, index: Index1D) -> &mut Self::Output {
+            self.content.index_mut(index.val)
+        }
     }
 
-    fn structure(&self) -> &Self::Structure {
-        &self.structure
+    impl<T, S> BoardIndex<Index1D> for VecBoard<T, S> {
+        fn all_indices(&self) -> Vec<Index1D> {
+            (0..self.content.len())
+                .map(|val| Index1D::from(val))
+                .collect()
+        }
+    }
+
+    impl<T, S> Board<Index1D> for VecBoard<T, S> {
+        type Structure = S;
+
+        fn size(&self) -> usize {
+            self.content.len()
+        }
+
+        fn contains(&self, index: Index1D) -> bool {
+            index.val < self.size()
+        }
+
+        fn structure(&self) -> &Self::Structure {
+            &self.structure
+        }
     }
 }
 
 // ----- structure implementations -----
 
-#[derive(Debug, Clone)]
-pub struct AdjacencySet<I: BoardIdxType + Hash> {
-    edges: HashSet<(I, I)>,
-}
+pub mod structures {
+    use super::*;
 
-impl<I: BoardIdxType + Hash> AdjacencySet<I> {
-    fn new() -> Self {
-        Self {
-            edges: HashSet::new(),
+    #[derive(Debug, Clone)]
+    pub struct AdjacencySet<I: BoardIdxType + Hash> {
+        edges: HashSet<(I, I)>,
+    }
+
+    impl<I: BoardIdxType + Hash> AdjacencySet<I> {
+        pub fn new() -> Self {
+            Self {
+                edges: HashSet::new(),
+            }
+        }
+
+        pub fn add_directed(&mut self, i: I, j: I) {
+            self.edges.insert((i, j));
+        }
+
+        pub fn add_undirected(&mut self, i: I, j: I) {
+            self.edges.insert((i, j));
+            self.edges.insert((j, i));
+        }
+
+        pub fn iter_edges(&self) -> impl Iterator<Item = &(I, I)> {
+            self.edges.iter()
         }
     }
 
-    fn add_directed(&mut self, i: I, j: I) {
-        self.edges.insert((i, j));
-    }
-
-    fn add_undirected(&mut self, i: I, j: I) {
-        self.edges.insert((i, j));
-        self.edges.insert((j, i));
-    }
-
-    fn iter_edges(&self) -> impl Iterator<Item = &(I, I)> {
-        self.edges.iter()
-    }
-}
-
-impl<I: BoardIdxType + Hash, B: Board<I> + ?Sized> AdjacencyStructure<I, B> for AdjacencySet<I> {
-    fn is_adjacent(&self, _board: &B, i: I, j: I) -> bool {
-        self.edges.contains(&(i, j))
+    impl<I: BoardIdxType + Hash, B: Board<I> + ?Sized> AdjacencyStructure<I, B> for AdjacencySet<I> {
+        fn is_adjacent(&self, _board: &B, i: I, j: I) -> bool {
+            self.edges.contains(&(i, j))
+        }
     }
 }
 
