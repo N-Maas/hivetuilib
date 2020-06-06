@@ -146,7 +146,7 @@ impl BoardIdxType for Index2D {}
 
 // ----- field implementation -----
 
-#[derive(Debug)]
+#[derive(Debug, Eq, Copy)]
 pub struct Field<'a, I: BoardIdxType, B: Board<I> + ?Sized> {
     board: &'a B,
     index: I,
@@ -169,13 +169,18 @@ impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> Field<'a, I, B> {
     }
 }
 
+// TODO good idea to compare pointer?
+impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> PartialEq for Field<'a, I, B> {
+    fn eq(&self, other: &Self) -> bool {
+        (self.board as *const B == other.board as *const B) && self.index == other.index
+    }
+}
+
 impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> Clone for Field<'a, I, B> {
     fn clone(&self) -> Self {
         Field { ..*self }
     }
 }
-
-impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> Copy for Field<'a, I, B> {}
 
 impl<'a, I: BoardIdxType, S, B: Board<I, Structure = S> + ?Sized> Field<'a, I, B>
 where
@@ -234,7 +239,7 @@ pub trait NeighborhoodyStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
 // ----- board implementations -----
 
 #[derive(Debug, Clone)]
-pub struct VecBoard<T, S=()> {
+pub struct VecBoard<T, S = ()> {
     content: Vec<T>,
     structure: S,
 }
@@ -254,7 +259,7 @@ impl<T: Default, S> VecBoard<T, S> {
             content: iter::repeat_with(|| Default::default())
                 .take(count)
                 .collect(),
-                structure,
+            structure,
         }
     }
 }
@@ -277,7 +282,9 @@ impl<T, S> IndexMut<Index1D> for VecBoard<T, S> {
 
 impl<T, S> BoardIndex<Index1D> for VecBoard<T, S> {
     fn all_indices(&self) -> Vec<Index1D> {
-        (0..self.content.len()).map(|val| Index1D::from(val)).collect()
+        (0..self.content.len())
+            .map(|val| Index1D::from(val))
+            .collect()
     }
 }
 
@@ -320,7 +327,7 @@ impl<I: BoardIdxType + Hash> AdjacencySet<I> {
         self.edges.insert((j, i));
     }
 
-    fn iter_edges(&self) -> impl Iterator<Item=&(I, I)> {
+    fn iter_edges(&self) -> impl Iterator<Item = &(I, I)> {
         self.edges.iter()
     }
 }
