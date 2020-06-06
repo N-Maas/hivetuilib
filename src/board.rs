@@ -261,6 +261,26 @@ where
     }
 }
 
+impl<'a, I: BoardIdxType, S, B: Board<I, Structure = S> + ?Sized, D: Eq> Navigable<D>
+    for Field<'a, I, B>
+where
+    S: DirectionStructure<I, B, D>,
+{
+    fn has_next(&self, direction: D) -> bool {
+        self.board
+            .structure()
+            .has_next(self.board, self.index, direction)
+    }
+
+    fn next(&self, direction: D) -> Option<Self> {
+        let board = self.board;
+        self.board
+            .structure()
+            .next(self.board, self.index, direction)
+            .map(move |i| Self::new(board, i))
+    }
+}
+
 // TOOD rather bad hack to enable iteration
 // #[unstable]
 pub trait BoardIndex<I: BoardIdxType>: IndexMut<I> {
@@ -278,6 +298,22 @@ pub trait NeighborhoodStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
 
     // TODO more efficient than vec?
     fn get_neighbors(&self, board: &B, field: I) -> Vec<I>;
+}
+
+pub trait DirectionStructure<I: BoardIdxType, B: Board<I> + ?Sized, D: Eq> {
+    fn has_next(&self, board: &B, field: I, direction: D) -> bool {
+        self.next(board, field, direction).is_some()
+    }
+
+    fn next(&self, board: &B, field: I, direction: D) -> Option<I>;
+}
+
+pub trait Navigable<D>: Sized {
+    fn has_next(&self, direction: D) -> bool {
+        self.next(direction).is_some()
+    }
+
+    fn next(&self, direction: D) -> Option<Self>;
 }
 
 // ----- board implementations -----
