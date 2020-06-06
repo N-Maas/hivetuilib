@@ -243,7 +243,7 @@ where
 
 impl<'a, I: BoardIdxType, S, B: Board<I, Structure = S> + ?Sized> Field<'a, I, B>
 where
-    S: NeighborhoodyStructure<I, B>,
+    S: NeighborhoodStructure<I, B>,
 {
     pub fn neighbor_count(&self) -> usize {
         self.board
@@ -273,7 +273,7 @@ pub trait AdjacencyStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
     fn is_adjacent(&self, board: &B, i: I, j: I) -> bool;
 }
 
-pub trait NeighborhoodyStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
+pub trait NeighborhoodStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
     fn neighbor_count(&self, board: &B, field: I) -> usize;
 
     // TODO more efficient than vec?
