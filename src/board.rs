@@ -1,10 +1,15 @@
-use std::{fmt::Debug, marker::PhantomData, ops::IndexMut, vec::IntoIter};
+use std::{
+    fmt::Debug, iter, iter::FromIterator, marker::PhantomData, ops::Index, ops::IndexMut,
+    vec::IntoIter,
+};
 
 // ----- trait definitions -----
 
+pub trait BoardIdxType: Copy + Eq + Debug {}
+
 pub trait Board<I>: BoardIndex<I>
 where
-    I: Copy + Eq + Debug,
+    I: BoardIdxType,
 {
     type Structure;
 
@@ -70,7 +75,7 @@ macro_rules! implBoardIntoIter {
             fn $call(self) -> Self::IntoIter;
         }
 
-        impl<'a, I: Copy + Eq + Debug, T, B: Board<I, Output = T> + ?Sized> $trait<I, T> for &'a B
+        impl<'a, I: BoardIdxType, T, B: Board<I, Output = T> + ?Sized> $trait<I, T> for &'a B
         where
             T: 'a + ?Sized,
         {
@@ -86,13 +91,13 @@ macro_rules! implBoardIntoIter {
             }
         }
 
-        pub struct $name<'a, I: Copy + Eq + Debug, T: ?Sized, B: Board<I, Output = T> + ?Sized> {
+        pub struct $name<'a, I: BoardIdxType, T: ?Sized, B: Board<I, Output = T> + ?Sized> {
             board: &'a B,
             iter: IntoIter<I>,
             _f: PhantomData<T>,
         }
 
-        impl<'a, I: Copy + Eq + Debug, T, B: Board<I, Output = T> + ?Sized> Iterator
+        impl<'a, I: BoardIdxType, T, B: Board<I, Output = T> + ?Sized> Iterator
             for $name<'a, I, T, B>
         where
             T: 'a + ?Sized,
@@ -118,10 +123,12 @@ implBoardIntoIter!(BoardIntoIter for BoardIter, into_iter, &'a T, get);
 
 // ----- index type -----
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Index1D {
     pub val: usize,
 }
+
+impl BoardIdxType for Index1D {}
 
 impl From<usize> for Index1D {
     fn from(val: usize) -> Self {
@@ -129,21 +136,23 @@ impl From<usize> for Index1D {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Index2D {
     pub x: usize,
     pub y: usize,
 }
 
+impl BoardIdxType for Index2D {}
+
 // ----- field implementation -----
 
 #[derive(Debug)]
-pub struct Field<'a, I: Copy + Eq + Debug, B: Board<I> + ?Sized> {
+pub struct Field<'a, I: BoardIdxType, B: Board<I> + ?Sized> {
     board: &'a B,
     index: I,
 }
 
-impl<'a, I: Copy + Eq + Debug, B: Board<I> + ?Sized> Field<'a, I, B> {
+impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> Field<'a, I, B> {
     pub fn new(board: &'a B, index: I) -> Self {
         Self { board, index }
     }
@@ -160,15 +169,15 @@ impl<'a, I: Copy + Eq + Debug, B: Board<I> + ?Sized> Field<'a, I, B> {
     }
 }
 
-impl<'a, I: Copy + Eq + Debug, B: Board<I> + ?Sized> Clone for Field<'a, I, B> {
+impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> Clone for Field<'a, I, B> {
     fn clone(&self) -> Self {
         Field { ..*self }
     }
 }
 
-impl<'a, I: Copy + Eq + Debug, B: Board<I> + ?Sized> Copy for Field<'a, I, B> {}
+impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> Copy for Field<'a, I, B> {}
 
-impl<'a, I: Copy + Eq + Debug, S, B: Board<I, Structure = S> + ?Sized> Field<'a, I, B>
+impl<'a, I: BoardIdxType, S, B: Board<I, Structure = S> + ?Sized> Field<'a, I, B>
 where
     S: AdjacencyStructure<I, B>,
 {
@@ -200,13 +209,13 @@ where
 
 // TOOD rather bad hack to enable iteration
 // #[unstable]
-pub trait BoardIndex<I>: IndexMut<I> {
+pub trait BoardIndex<I: BoardIdxType>: IndexMut<I> {
     fn all_indices(&self) -> Vec<I>;
 
     // fn enumerate_mut(&mut self) -> Vec<(I, &mut Self::Output)>;
 }
 
-pub trait AdjacencyStructure<I, B: BoardIndex<I> + ?Sized> {
+pub trait AdjacencyStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
     fn is_adjacent(&self, board: &B, i: I, j: I) -> bool;
 
     fn neighbor_count(&self, board: &B, field: I) -> usize;
