@@ -190,7 +190,12 @@ where
     pub fn is_adjacent(&self, other: &Self) -> bool {
         self.is_adjacent_to(other.index)
     }
+}
 
+impl<'a, I: BoardIdxType, S, B: Board<I, Structure = S> + ?Sized> Field<'a, I, B>
+where
+    S: NeighborhoodyStructure<I, B>,
+{
     pub fn neighbor_count(&self) -> usize {
         self.board
             .structure()
@@ -217,7 +222,9 @@ pub trait BoardIndex<I: BoardIdxType>: IndexMut<I> {
 
 pub trait AdjacencyStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
     fn is_adjacent(&self, board: &B, i: I, j: I) -> bool;
+}
 
+pub trait NeighborhoodyStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
     fn neighbor_count(&self, board: &B, field: I) -> usize;
 
     // TODO more efficient than vec?
@@ -227,7 +234,7 @@ pub trait AdjacencyStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
 // ----- board implementations -----
 
 #[derive(Debug, Clone)]
-pub struct LinearBoard<T, S=()> {
+pub struct VecBoard<T, S=()> {
     content: Vec<T>,
     structure: S,
 }
@@ -290,7 +297,37 @@ impl<T, S> Board<Index1D> for VecBoard<T, S> {
     }
 }
 
+// ----- structure implementations -----
 
+#[derive(Debug, Clone)]
+pub struct AdjacencySet<I: BoardIdxType + Hash> {
+    edges: HashSet<(I, I)>,
+}
 
+impl<I: BoardIdxType + Hash> AdjacencySet<I> {
+    fn new() -> Self {
+        Self {
+            edges: HashSet::new(),
+        }
+    }
+
+    fn add_directed(&mut self, i: I, j: I) {
+        self.edges.insert((i, j));
+    }
+
+    fn add_undirected(&mut self, i: I, j: I) {
+        self.edges.insert((i, j));
+        self.edges.insert((j, i));
+    }
+
+    fn iter_edges(&self) -> impl Iterator<Item=&(I, I)> {
+        self.edges.iter()
+    }
+}
+
+impl<I: BoardIdxType + Hash, B: Board<I> + ?Sized> AdjacencyStructure<I, B> for AdjacencySet<I> {
+    fn is_adjacent(&self, _board: &B, i: I, j: I) -> bool {
+        self.edges.contains(&(i, j))
+    }
 }
 
