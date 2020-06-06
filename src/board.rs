@@ -227,96 +227,70 @@ pub trait AdjacencyStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
 // ----- board implementations -----
 
 #[derive(Debug, Clone)]
-pub struct LinearBoard<T> {
+pub struct LinearBoard<T, S=()> {
     content: Vec<T>,
+    structure: S,
 }
 
-impl<T: Clone> LinearBoard<T> {
-    pub fn from_default(count: usize, def: T) -> Self {
-        LinearBoard {
+impl<T: Clone, S> VecBoard<T, S> {
+    pub fn from_default(count: usize, def: T, structure: S) -> Self {
+        VecBoard {
             content: vec![def; count],
+            structure,
         }
     }
 }
 
-impl<T: Default> LinearBoard<T> {
-    pub fn with_default(count: usize) -> Self {
-        LinearBoard {
+impl<T: Default, S> VecBoard<T, S> {
+    pub fn with_default(count: usize, structure: S) -> Self {
+        VecBoard {
             content: iter::repeat_with(|| Default::default())
                 .take(count)
                 .collect(),
+                structure,
         }
     }
 }
 
-impl<T> FromIterator<T> for LinearBoard<T> {
-    fn from_iter<I>(iter: I) -> Self
-    where
-        I: IntoIterator<Item = T>,
-    {
-        LinearBoard {
-            content: iter.into_iter().collect(),
-        }
+// TODO: builder
+
+impl<T, S> Index<Index1D> for VecBoard<T, S> {
+    type Output = T;
+
+    fn index(&self, index: Index1D) -> &Self::Output {
+        self.content.index(index.val)
     }
 }
 
-impl<T> BoardIndex for LinearBoard<T> {
-    type Index = Index1D;
-
-    fn all_indices(&self) -> Vec<Self::Index> {
-        (0..self.content.len()).map(|val| Index1D { val }).collect()
+impl<T, S> IndexMut<Index1D> for VecBoard<T, S> {
+    fn index_mut(&mut self, index: Index1D) -> &mut Self::Output {
+        self.content.index_mut(index.val)
     }
 }
 
-impl<T> UnstableAccess<T> for LinearBoard<T> {
-    fn mut_ref_vec<'a>(&'a mut self) -> Vec<&'a mut T> {
-        self.content.iter_mut().collect()
+impl<T, S> BoardIndex<Index1D> for VecBoard<T, S> {
+    fn all_indices(&self) -> Vec<Index1D> {
+        (0..self.content.len()).map(|val| Index1D::from(val)).collect()
     }
 }
 
-impl<T> Board for LinearBoard<T> {
-    type Content = T;
-    type Structure = ();
+impl<T, S> Board<Index1D> for VecBoard<T, S> {
+    type Structure = S;
 
     fn size(&self) -> usize {
         self.content.len()
     }
 
+    fn contains(&self, index: Index1D) -> bool {
+        index.val < self.size()
+    }
+
     fn structure(&self) -> &Self::Structure {
-        &()
-    }
-
-    fn get(&self, index: Index1D) -> Option<&T> {
-        self.content.get(index.val)
-    }
-
-    fn get_mut(&mut self, index: Index1D) -> Option<&mut T> {
-        self.content.get_mut(index.val)
+        &self.structure
     }
 }
 
-// ########## Macro?
-impl<I, T> Index<I> for LinearBoard<T>
-where
-    Index1D: From<I>,
-{
-    type Output = T;
 
-    fn index(&self, idx: I) -> &T {
-        self.content.index(Index1D::from(idx).val)
-    }
+
 }
 
-impl<I, T> IndexMut<I> for LinearBoard<T>
-where
-    Index1D: From<I>,
-{
-    fn index_mut(&mut self, idx: I) -> &mut T {
-        self.content.index_mut(Index1D::from(idx).val)
-    }
-}
-// ##########
-
-// pub fn test_index<T: Debug, B: Board<T>>(b: B) {
-//     print!("{:?}", b[0]);
-// }
