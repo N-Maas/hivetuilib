@@ -1,6 +1,8 @@
+pub mod board_impl;
+
 use std::{
-    collections::HashSet, fmt::Debug, hash::Hash, iter, iter::Copied, marker::PhantomData,
-    ops::Index, ops::IndexMut, slice::Iter, vec::IntoIter,
+    collections::HashSet, fmt::Debug, hash::Hash, iter::Copied, marker::PhantomData, ops::IndexMut,
+    slice::Iter, vec::IntoIter,
 };
 
 // ----- trait definitions -----
@@ -278,88 +280,6 @@ pub trait Navigable<D: Copy + Eq>: Sized {
     }
 
     fn next(&self, direction: D) -> Option<Self>;
-}
-
-// ----- board implementations -----
-
-pub mod boards {
-    use super::*;
-
-    #[derive(Debug, Clone)]
-    pub struct VecBoard<T, S = ()> {
-        content: Vec<T>,
-        structure: S,
-    }
-
-    impl<T: Clone, S> VecBoard<T, S> {
-        pub fn from_default(count: usize, def: T, structure: S) -> Self {
-            VecBoard {
-                content: vec![def; count],
-                structure,
-            }
-        }
-    }
-
-    impl<T: Default, S> VecBoard<T, S> {
-        pub fn with_default(count: usize, structure: S) -> Self {
-            VecBoard {
-                content: iter::repeat_with(|| Default::default())
-                    .take(count)
-                    .collect(),
-                structure,
-            }
-        }
-    }
-
-    // TODO: builder
-
-    impl<T, S> Index<Index1D> for VecBoard<T, S> {
-        type Output = T;
-
-        fn index(&self, index: Index1D) -> &Self::Output {
-            self.content.index(index.val)
-        }
-    }
-
-    impl<T, S> IndexMut<Index1D> for VecBoard<T, S> {
-        fn index_mut(&mut self, index: Index1D) -> &mut Self::Output {
-            self.content.index_mut(index.val)
-        }
-    }
-
-    impl<T, S> BoardIndex<Index1D> for VecBoard<T, S> {
-        fn all_indices(&self) -> Vec<Index1D> {
-            (0..self.content.len())
-                .map(|val| Index1D::from(val))
-                .collect()
-        }
-    }
-
-    impl<T, S> Board<Index1D> for VecBoard<T, S> {
-        type Structure = S;
-
-        fn size(&self) -> usize {
-            self.content.len()
-        }
-
-        fn contains(&self, index: Index1D) -> bool {
-            index.val < self.size()
-        }
-
-        fn structure(&self) -> &Self::Structure {
-            &self.structure
-        }
-    }
-
-    impl<T, S> ContiguousBoard<Index1D> for VecBoard<T, S> {
-        fn max(&self) -> Index1D {
-            Index1D::from(self.content.len())
-        }
-
-        fn wrapped(&self, index: Index1D) -> Index1D {
-            Index1D::from(index.val % self.content.len())
-        }
-    }
 }
 
 // ----- structure implementations -----
