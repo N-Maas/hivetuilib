@@ -150,44 +150,6 @@ pub struct Index2D {
 
 impl BoardIdxType for Index2D {}
 
-pub mod directions {
-    use super::*;
-
-    pub enum Offset {
-        Neg(usize),
-        Pos(usize),
-    }
-
-    fn apply_offset(n: usize, offset: Offset) -> Option<usize> {
-        match offset {
-            Offset::Pos(offset) => n.checked_add(offset),
-            Offset::Neg(offset) => n.checked_sub(offset),
-        }
-    }
-
-    impl Add<Offset> for Index1D {
-        type Output = Option<Self>;
-
-        fn add(self, other: Offset) -> Option<Self> {
-            apply_offset(self.val, other).map(|val| Self::from(val))
-        }
-    }
-
-    impl Add<(Offset, Offset)> for Index2D {
-        type Output = Option<Self>;
-
-        fn add(self, other: (Offset, Offset)) -> Option<Self> {
-            let new_x = apply_offset(self.x, other.0);
-            let new_y = apply_offset(self.y, other.1);
-
-            match (new_x, new_y) {
-                (Some(x), Some(y)) => Some(Self { x, y }),
-                _ => None,
-            }
-        }
-    }
-}
-
 // ----- field implementation -----
 
 #[derive(Debug, Eq, Copy)]
@@ -261,17 +223,11 @@ where
     }
 }
 
-impl<'a, I: BoardIdxType, S, B: Board<I, Structure = S> + ?Sized, D: Eq> Navigable<D>
+impl<'a, I: BoardIdxType, S, B: Board<I, Structure = S> + ?Sized, D: Copy + Eq> Navigable<D>
     for Field<'a, I, B>
 where
     S: DirectionStructure<I, B, D>,
 {
-    fn has_next(&self, direction: D) -> bool {
-        self.board
-            .structure()
-            .has_next(self.board, self.index, direction)
-    }
-
     fn next(&self, direction: D) -> Option<Self> {
         let board = self.board;
         self.board
@@ -300,7 +256,7 @@ pub trait NeighborhoodStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
     fn get_neighbors(&self, board: &B, field: I) -> Vec<I>;
 }
 
-pub trait DirectionStructure<I: BoardIdxType, B: Board<I> + ?Sized, D: Eq> {
+pub trait DirectionStructure<I: BoardIdxType, B: Board<I> + ?Sized, D: Copy + Eq> {
     fn has_next(&self, board: &B, field: I, direction: D) -> bool {
         self.next(board, field, direction).is_some()
     }
@@ -308,7 +264,7 @@ pub trait DirectionStructure<I: BoardIdxType, B: Board<I> + ?Sized, D: Eq> {
     fn next(&self, board: &B, field: I, direction: D) -> Option<I>;
 }
 
-pub trait Navigable<D>: Sized {
+pub trait Navigable<D: Copy + Eq>: Sized {
     fn has_next(&self, direction: D) -> bool {
         self.next(direction).is_some()
     }
@@ -426,3 +382,54 @@ pub mod structures {
     }
 }
 
+// ----- directions -----
+
+pub mod directions {
+    use super::*;
+
+    pub trait DirectionOffset {
+        type Offset;
+
+        fn get_offset(&self) -> Offset;
+    }
+
+    pub trait DirectionReversable {
+        fn reversed(&self) -> Self;
+    }
+
+    pub trait DirectionEnumerable: Sized {
+        type Iter: Iterator<Item = Self>;
+
+        fn enumerate_all() -> Self::Iter;
+    }
+
+    pub enum Offset {
+        Neg(usize),
+        Pos(usize),
+    }
+
+    fn apply_offset(n: usize, offset: Offset) -> Option<usize> {
+        match offset {
+            Offset::Pos(offset) => n.checked_add(offset),
+            Offset::Neg(offset) => n.checked_sub(offset),
+        }
+    }
+
+    impl Add<Offset> for Index1D {
+        type Output = Option<Self>;
+
+        fn add(self, other: Offset) -> Option<Self> {
+            apply_offset(self.val, other).map(|val| Self::from(val))
+        }
+    }
+
+    impl Add<(Offset, Offset)> for Index2D {
+        type Output = Option<Self>;
+
+        fn add(self, other: (Offset, Offset)) -> Option<Self> {
+            let x = apply_offset(self.x, other.0)?;
+            let y = apply_offset(self.y, other.1)?;
+            Some(Self { x, y })
+        }
+    }
+}
