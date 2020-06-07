@@ -33,11 +33,7 @@ where
     }
 
     fn get_field<'a>(&'a self, index: I) -> Option<Field<'a, I, Self>> {
-        if self.contains(index) {
-            Some(Field::new(self, index))
-        } else {
-            None
-        }
+        Field::new(self, index)
     }
 
     fn get(&self, idx: I) -> Option<&Self::Output> {
@@ -161,8 +157,12 @@ pub struct Field<'a, I: BoardIdxType, B: Board<I> + ?Sized> {
 }
 
 impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> Field<'a, I, B> {
-    pub fn new(board: &'a B, index: I) -> Self {
-        Self { board, index }
+    pub fn new(board: &'a B, index: I) -> Option<Self> {
+        if board.contains(index) {
+            Some(Self { board, index })
+        } else {
+            None
+        }
     }
 
     pub fn index(&self) -> I {
@@ -170,10 +170,10 @@ impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> Field<'a, I, B> {
     }
 
     pub fn content(&self) -> &B::Output {
-        &self
-            .board
-            .get(self.index)
-            .expect(&format!("Index of field is invalid: {:?}", self.index))
+        &self.board.get(self.index).expect(&format!(
+            "Index of field is invalid: {:?} - perhaps the field was removed from the board?",
+            self.index
+        ))
     }
 }
 
@@ -221,7 +221,7 @@ where
             .structure()
             .get_neighbors(board, self.index)
             .into_iter()
-            .map(move |i| Self::new(board, i))
+            .filter_map(move |i| Self::new(board, i))
     }
 }
 
@@ -232,10 +232,10 @@ where
 {
     fn next(&self, direction: D) -> Option<Self> {
         let board = self.board;
-        self.board
+        board
             .structure()
-            .next(self.board, self.index, direction)
-            .map(move |i| Self::new(board, i))
+            .next(board, self.index, direction)
+            .and_then(|i| Self::new(board, i))
     }
 }
 
