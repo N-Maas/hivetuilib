@@ -1,5 +1,5 @@
+use super::*;
 
-use crate::board::*;
 use std::{
     iter,
     ops::{Index, IndexMut},
@@ -82,7 +82,7 @@ impl<T, S> ContiguousBoard<Index1D> for VecBoard<T, S> {
 }
 
 mod test {
-    use crate::board::board_impl::*;
+    use super::*;
 
     #[test]
     fn vec_board_test() {
