@@ -1,14 +1,6 @@
 use std::{
-    collections::HashSet,
-    fmt::Debug,
-    hash::Hash,
-    iter,
-    iter::Copied,
-    marker::PhantomData,
-    ops::IndexMut,
-    ops::Index,
-    slice::Iter,
-    vec::IntoIter,
+    collections::HashSet, fmt::Debug, hash::Hash, iter, iter::Copied, marker::PhantomData,
+    ops::Index, ops::IndexMut, slice::Iter, vec::IntoIter,
 };
 
 // ----- trait definitions -----
@@ -122,6 +114,17 @@ macro_rules! implBoardIntoIter {
 implBoardIntoIter!(BoardIntoFieldIter for FieldIter, into_field_iter, Field<'a, I, B>, get_field);
 
 implBoardIntoIter!(BoardIntoIter for BoardIter, into_iter, &'a T, get);
+
+// ----- extended board types -----
+
+// TODO spelling?
+pub trait ContiguousBoard<I: BoardIdxType + Ord>: Board<I> {
+    fn max(&self) -> Index1D;
+
+    fn wrapped(&self, index: I) -> I;
+
+    // TODO: get_wrapped etc. helper functions?
+}
 
 // ----- index type -----
 
@@ -255,18 +258,18 @@ pub trait AdjacencyStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
 }
 
 pub trait NeighborhoodStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
-    fn neighbor_count(&self, board: &B, field: I) -> usize;
+    fn neighbor_count(&self, board: &B, index: I) -> usize;
 
     // TODO more efficient than vec?
-    fn get_neighbors(&self, board: &B, field: I) -> Vec<I>;
+    fn get_neighbors(&self, board: &B, index: I) -> Vec<I>;
 }
 
 pub trait DirectionStructure<I: BoardIdxType, B: Board<I> + ?Sized, D: Copy + Eq> {
-    fn has_next(&self, board: &B, field: I, direction: D) -> bool {
-        self.next(board, field, direction).is_some()
+    fn has_next(&self, board: &B, index: I, direction: D) -> bool {
+        self.next(board, index, direction).is_some()
     }
 
-    fn next(&self, board: &B, field: I, direction: D) -> Option<I>;
+    fn next(&self, board: &B, index: I, direction: D) -> Option<I>;
 }
 
 pub trait Navigable<D: Copy + Eq>: Sized {
@@ -347,6 +350,16 @@ pub mod boards {
             &self.structure
         }
     }
+
+    impl<T, S> ContiguousBoard<Index1D> for VecBoard<T, S> {
+        fn max(&self) -> Index1D {
+            Index1D::from(self.content.len())
+        }
+
+        fn wrapped(&self, index: Index1D) -> Index1D {
+            Index1D::from(index.val % self.content.len())
+        }
+    }
 }
 
 // ----- structure implementations -----
@@ -393,12 +406,50 @@ pub mod structures {
         _d: PhantomData<D>,
     }
 
+    impl<I: OffsetableIndex, D: DirectionOffset<I::Offset>> OffsetStructure<I, D> {
+        pub fn new() -> Self {
+            Self {
+                _i: PhantomData,
+                _d: PhantomData,
+            }
+        }
+    }
+
     impl<I: OffsetableIndex, B: Board<I> + ?Sized, D: DirectionOffset<I::Offset>>
         DirectionStructure<I, B, D> for OffsetStructure<I, D>
     {
         // TODO check validity of index?
-        fn next(&self, _board: &B, field: I, direction: D) -> Option<I> {
-            field.apply_offset(direction.get_offset())
+        fn next(&self, _board: &B, index: I, direction: D) -> Option<I> {
+            index.apply_offset(direction.get_offset())
+        }
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    pub struct WrappedOffsetStructure<I: OffsetableIndex + Ord, D: DirectionOffset<I::Offset>> {
+        _i: PhantomData<I>,
+        _d: PhantomData<D>,
+    }
+
+    impl<I: OffsetableIndex + Ord, D: DirectionOffset<I::Offset>> WrappedOffsetStructure<I, D> {
+        pub fn new() -> Self {
+            Self {
+                _i: PhantomData,
+                _d: PhantomData,
+            }
+        }
+    }
+
+    impl<
+            I: OffsetableIndex + Ord,
+            B: ContiguousBoard<I> + ?Sized,
+            D: DirectionOffset<I::Offset>,
+        > DirectionStructure<I, B, D> for WrappedOffsetStructure<I, D>
+    {
+        // TODO check validity of index?
+        fn next(&self, board: &B, index: I, direction: D) -> Option<I> {
+            index
+                .apply_offset(direction.get_offset())
+                .map(|i| board.wrapped(i))
         }
     }
 }
