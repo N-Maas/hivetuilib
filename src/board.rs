@@ -456,4 +456,40 @@ pub mod directions {
             Some(Self { x, y })
         }
     }
+
+    // ----- direction implementations -----
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    pub enum BinaryDirection {
+        Forward,
+        Backward,
+    }
+
+    impl DirectionOffset<Offset> for BinaryDirection {
+        fn get_offset(&self) -> Offset {
+            match self {
+                BinaryDirection::Forward => Offset::Pos(1),
+                BinaryDirection::Backward => Offset::Neg(1),
+            }
+        }
+    }
+
+    impl DirectionReversable for BinaryDirection {
+        fn reversed(&self) -> Self {
+            match self {
+                BinaryDirection::Forward => BinaryDirection::Backward,
+                BinaryDirection::Backward => BinaryDirection::Forward,
+            }
+        }
+    }
+
+    impl DirectionEnumerable for BinaryDirection {
+        type Iter = Copied<Iter<'static, BinaryDirection>>;
+
+        fn enumerate_all() -> Self::Iter {
+            static DIRS: [BinaryDirection; 2] =
+                [BinaryDirection::Forward, BinaryDirection::Backward];
+            DIRS.iter().copied()
+        }
+    }
 }
