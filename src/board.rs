@@ -164,14 +164,6 @@ pub trait BoardIndex<I: BoardIdxType>: IndexMut<I> {
 
 // ----- field implementation -----
 
-pub trait Navigable<D: Copy + Eq>: Sized {
-    fn has_next(&self, direction: D) -> bool {
-        self.next(direction).is_some()
-    }
-
-    fn next(&self, direction: D) -> Option<Self>;
-}
-
 #[derive(Debug, Eq, Copy)]
 pub struct Field<'a, I: BoardIdxType, B: Board<I> + ?Sized> {
     board: &'a B,
@@ -251,12 +243,11 @@ where
     }
 }
 
-impl<'a, I: BoardIdxType, S, B: Board<I, Structure = S> + ?Sized, D: Copy + Eq> Navigable<D>
-    for Field<'a, I, B>
+impl<'a, I: BoardIdxType, S, B: Board<I, Structure = S> + ?Sized> Field<'a, I, B>
 where
-    S: DirectionStructure<I, B, D>,
+    S: DirectionStructure<I, B>,
 {
-    fn next(&self, direction: D) -> Option<Self> {
+    pub fn next(&self, direction: S::Direction) -> Option<Self> {
         let board = self.board;
         board
             .structure()
@@ -276,10 +267,12 @@ pub trait NeighborhoodStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
     fn get_neighbors(&self, board: &B, index: I) -> Vec<I>;
 }
 
-pub trait DirectionStructure<I: BoardIdxType, B: Board<I> + ?Sized, D: Copy + Eq> {
-    fn has_next(&self, board: &B, index: I, direction: D) -> bool {
+pub trait DirectionStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
+    type Direction: Copy + Eq;
+
+    fn has_next(&self, board: &B, index: I, direction: Self::Direction) -> bool {
         self.next(board, index, direction).is_some()
     }
 
-    fn next(&self, board: &B, index: I, direction: D) -> Option<I>;
+    fn next(&self, board: &B, index: I, direction: Self::Direction) -> Option<I>;
 }

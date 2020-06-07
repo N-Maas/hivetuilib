@@ -49,8 +49,10 @@ impl<I: OffsetableIndex, D: DirectionOffset<I::Offset>> OffsetStructure<I, D> {
 }
 
 impl<I: OffsetableIndex, B: Board<I> + ?Sized, D: DirectionOffset<I::Offset>>
-    DirectionStructure<I, B, D> for OffsetStructure<I, D>
+    DirectionStructure<I, B> for OffsetStructure<I, D>
 {
+    type Direction = D;
+
     // TODO check validity of index?
     fn next(&self, _board: &B, index: I, direction: D) -> Option<I> {
         index.apply_offset(direction.get_offset())
@@ -73,8 +75,10 @@ impl<I: OffsetableIndex + Ord, D: DirectionOffset<I::Offset>> WrappedOffsetStruc
 }
 
 impl<I: OffsetableIndex + Ord, B: ContiguousBoard<I> + ?Sized, D: DirectionOffset<I::Offset>>
-    DirectionStructure<I, B, D> for WrappedOffsetStructure<I, D>
+    DirectionStructure<I, B> for WrappedOffsetStructure<I, D>
 {
+    type Direction = D;
+
     // TODO check validity of index?
     fn next(&self, board: &B, index: I, direction: D) -> Option<I> {
         index
