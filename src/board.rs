@@ -3,9 +3,11 @@ use std::{
     fmt::Debug,
     hash::Hash,
     iter,
+    iter::Copied,
     marker::PhantomData,
     ops::IndexMut,
     ops::{Add, Index},
+    slice::Iter,
     vec::IntoIter,
 };
 
@@ -347,6 +349,7 @@ pub mod boards {
 // ----- structure implementations -----
 
 pub mod structures {
+    use super::directions::{DirectionOffset, OffsetableIndex};
     use super::*;
 
     #[derive(Debug, Clone)]
@@ -380,6 +383,20 @@ pub mod structures {
             self.edges.contains(&(i, j))
         }
     }
+
+    #[derive(Debug, Clone)]
+    pub struct OffsetStructure<I: OffsetableIndex, D: DirectionOffset<I::Offset>> {
+        _i: PhantomData<I>,
+        _d: PhantomData<D>,
+    }
+
+    impl<I: OffsetableIndex, B: Board<I> + ?Sized, D: DirectionOffset<I::Offset>>
+        DirectionStructure<I, B, D> for OffsetStructure<I, D>
+    {
+        fn next(&self, _board: &B, field: I, direction: D) -> Option<I> {
+            field.apply_offset(direction.get_offset())
+        }
+    }
 }
 
 // ----- directions -----
@@ -387,21 +404,22 @@ pub mod structures {
 pub mod directions {
     use super::*;
 
-    pub trait DirectionOffset {
-        type Offset;
-
-        fn get_offset(&self) -> Offset;
+    pub trait DirectionOffset<O>: Copy + Eq {
+        fn get_offset(&self) -> O;
     }
 
-    pub trait DirectionReversable {
+    pub trait DirectionReversable: Copy + Eq {
         fn reversed(&self) -> Self;
     }
 
-    pub trait DirectionEnumerable: Sized {
+    pub trait DirectionEnumerable: Copy + Eq + Sized {
         type Iter: Iterator<Item = Self>;
 
         fn enumerate_all() -> Self::Iter;
     }
+
+    // TODO: trait for direction -> index mapping (efficient structure)
+    // TODO: derive macro for Enumerable/index mapping
 
     pub enum Offset {
         Neg(usize),
@@ -415,20 +433,26 @@ pub mod directions {
         }
     }
 
-    impl Add<Offset> for Index1D {
-        type Output = Option<Self>;
+    pub trait OffsetableIndex: BoardIdxType {
+        type Offset;
 
-        fn add(self, other: Offset) -> Option<Self> {
-            apply_offset(self.val, other).map(|val| Self::from(val))
+        fn apply_offset(&self, offset: Self::Offset) -> Option<Self>;
+    }
+
+    impl OffsetableIndex for Index1D {
+        type Offset = Offset;
+
+        fn apply_offset(&self, offset: Offset) -> Option<Self> {
+            apply_offset(self.val, offset).map(|val| Self::from(val))
         }
     }
 
-    impl Add<(Offset, Offset)> for Index2D {
-        type Output = Option<Self>;
+    impl OffsetableIndex for Index2D {
+        type Offset = (Offset, Offset);
 
-        fn add(self, other: (Offset, Offset)) -> Option<Self> {
-            let x = apply_offset(self.x, other.0)?;
-            let y = apply_offset(self.y, other.1)?;
+        fn apply_offset(&self, offset: (Offset, Offset)) -> Option<Self> {
+            let x = apply_offset(self.x, offset.0)?;
+            let y = apply_offset(self.y, offset.1)?;
             Some(Self { x, y })
         }
     }
