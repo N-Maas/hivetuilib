@@ -6,7 +6,7 @@ use std::{
     iter::Copied,
     marker::PhantomData,
     ops::IndexMut,
-    ops::{Add, Index},
+    ops::Index,
     slice::Iter,
     vec::IntoIter,
 };
@@ -15,10 +15,7 @@ use std::{
 
 pub trait BoardIdxType: Copy + Eq + Debug {}
 
-pub trait Board<I>: BoardIndex<I>
-where
-    I: BoardIdxType,
-{
+pub trait Board<I: BoardIdxType>: BoardIndex<I> {
     type Structure;
 
     fn size(&self) -> usize;
@@ -27,6 +24,7 @@ where
 
     fn structure(&self) -> &Self::Structure;
 
+    // TODO better get_field_unchecked or similar?
     fn field_at<'a>(&'a self, index: I) -> Field<'a, I, Self> {
         self.get_field(index)
             .expect(&format!("invalid index: {:?}", index))
@@ -36,17 +34,17 @@ where
         Field::new(self, index)
     }
 
-    fn get(&self, idx: I) -> Option<&Self::Output> {
-        if self.contains(idx) {
-            Some(self.index(idx))
+    fn get(&self, index: I) -> Option<&Self::Output> {
+        if self.contains(index) {
+            Some(self.index(index))
         } else {
             None
         }
     }
 
-    fn get_mut(&mut self, idx: I) -> Option<&mut Self::Output> {
-        if self.contains(idx) {
-            Some(self.index_mut(idx))
+    fn get_mut(&mut self, index: I) -> Option<&mut Self::Output> {
+        if self.contains(index) {
+            Some(self.index_mut(index))
         } else {
             None
         }
@@ -148,6 +146,15 @@ pub struct Index2D {
 
 impl BoardIdxType for Index2D {}
 
+// TOOD rather bad hack to enable iteration - enforce lifetime binding to self?
+// TODO should we use IndexMut?
+// #[unstable]
+pub trait BoardIndex<I: BoardIdxType>: IndexMut<I> {
+    fn all_indices(&self) -> Vec<I>;
+
+    // fn enumerate_mut(&mut self) -> Vec<(I, &mut Self::Output)>;
+}
+
 // ----- field implementation -----
 
 #[derive(Debug, Eq, Copy)]
@@ -170,10 +177,14 @@ impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> Field<'a, I, B> {
     }
 
     pub fn content(&self) -> &B::Output {
-        &self.board.get(self.index).expect(&format!(
+        self.content_checked().expect(&format!(
             "Index of field is invalid: {:?} - perhaps the field was removed from the board?",
             self.index
         ))
+    }
+
+    pub fn content_checked(&self) -> Option<&B::Output> {
+        self.board.get(self.index)
     }
 }
 
@@ -237,14 +248,6 @@ where
             .next(board, self.index, direction)
             .and_then(|i| Self::new(board, i))
     }
-}
-
-// TOOD rather bad hack to enable iteration
-// #[unstable]
-pub trait BoardIndex<I: BoardIdxType>: IndexMut<I> {
-    fn all_indices(&self) -> Vec<I>;
-
-    // fn enumerate_mut(&mut self) -> Vec<(I, &mut Self::Output)>;
 }
 
 pub trait AdjacencyStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
@@ -384,7 +387,7 @@ pub mod structures {
         }
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Copy)]
     pub struct OffsetStructure<I: OffsetableIndex, D: DirectionOffset<I::Offset>> {
         _i: PhantomData<I>,
         _d: PhantomData<D>,
@@ -393,6 +396,7 @@ pub mod structures {
     impl<I: OffsetableIndex, B: Board<I> + ?Sized, D: DirectionOffset<I::Offset>>
         DirectionStructure<I, B, D> for OffsetStructure<I, D>
     {
+        // TODO check validity of index?
         fn next(&self, _board: &B, field: I, direction: D) -> Option<I> {
             field.apply_offset(direction.get_offset())
         }
