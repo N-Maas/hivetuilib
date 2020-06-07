@@ -33,6 +33,37 @@ impl<I: BoardIdxType + Hash, B: Board<I> + ?Sized> AdjacencyStructure<I, B> for 
     }
 }
 
+// ----- macros for simpler implementation of direction structures -----
+macro_rules! implAdjacencyStructure {
+    () => {
+        fn is_adjacent(&self, board: &B, i: I, j: I) -> bool {
+            D::enumerate_all()
+                .filter_map(|d| self.next(board, i, d))
+                .any(|index| index == j)
+        }
+    };
+}
+
+macro_rules! implNeighborhoodStructure {
+    () => {
+        fn neighbor_count(&self, board: &B, index: I) -> usize {
+            D::enumerate_all()
+                .filter_map(|d| self.next(board, index, d))
+                .filter(|i| board.contains(*i))
+                .count()
+        }
+
+        fn get_neighbors(&self, board: &B, index: I) -> Vec<I> {
+            D::enumerate_all()
+                .filter_map(|d| self.next(board, index, d))
+                .filter(|i| board.contains(*i))
+                .collect()
+        }
+    };
+}
+
+// ----- direction structures -----
+
 #[derive(Debug, Clone, Copy)]
 pub struct OffsetStructure<I: OffsetableIndex, D: DirectionOffset<I::Offset>> {
     _i: PhantomData<I>,
@@ -53,10 +84,28 @@ impl<I: OffsetableIndex, B: Board<I> + ?Sized, D: DirectionOffset<I::Offset>>
 {
     type Direction = D;
 
-    // TODO check validity of index?
-    fn next(&self, _board: &B, index: I, direction: D) -> Option<I> {
-        index.apply_offset(direction.get_offset())
+    fn next(&self, board: &B, index: I, direction: D) -> Option<I> {
+        index
+            .apply_offset(direction.get_offset())
+            .filter(|i| board.contains(*i))
     }
+}
+
+// TODO: good ideas? (might be inperformant)
+impl<I: OffsetableIndex, B: Board<I> + ?Sized, D: DirectionOffset<I::Offset>>
+    AdjacencyStructure<I, B> for OffsetStructure<I, D>
+where
+    D: DirectionEnumerable,
+{
+    implAdjacencyStructure!();
+}
+
+impl<I: OffsetableIndex, B: Board<I> + ?Sized, D: DirectionOffset<I::Offset>>
+    NeighborhoodStructure<I, B> for OffsetStructure<I, D>
+where
+    D: DirectionEnumerable,
+{
+    implNeighborhoodStructure!();
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -79,10 +128,27 @@ impl<I: OffsetableIndex + Ord, B: ContiguousBoard<I> + ?Sized, D: DirectionOffse
 {
     type Direction = D;
 
-    // TODO check validity of index?
     fn next(&self, board: &B, index: I, direction: D) -> Option<I> {
         index
             .apply_offset(direction.get_offset())
             .map(|i| board.wrapped(i))
+            .filter(|i| board.contains(*i))
     }
+}
+
+// TODO: good ideas? (might be inperformant)
+impl<I: OffsetableIndex + Ord, B: ContiguousBoard<I> + ?Sized, D: DirectionOffset<I::Offset>>
+    AdjacencyStructure<I, B> for WrappedOffsetStructure<I, D>
+where
+    D: DirectionEnumerable,
+{
+    implAdjacencyStructure!();
+}
+
+impl<I: OffsetableIndex + Ord, B: ContiguousBoard<I> + ?Sized, D: DirectionOffset<I::Offset>>
+    NeighborhoodStructure<I, B> for WrappedOffsetStructure<I, D>
+where
+    D: DirectionEnumerable,
+{
+    implNeighborhoodStructure!();
 }

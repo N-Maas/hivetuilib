@@ -261,7 +261,9 @@ pub trait AdjacencyStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
 }
 
 pub trait NeighborhoodStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
-    fn neighbor_count(&self, board: &B, index: I) -> usize;
+    fn neighbor_count(&self, board: &B, index: I) -> usize {
+        self.get_neighbors(board, index).len()
+    }
 
     // TODO more efficient than vec?
     fn get_neighbors(&self, board: &B, index: I) -> Vec<I>;
