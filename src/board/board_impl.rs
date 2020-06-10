@@ -81,6 +81,114 @@ impl<T, S> ContiguousBoard<Index1D> for VecBoard<T, S> {
     }
 }
 
+// A two-dimensional immutable board. The fields are saved in a vec internally, calculating the index as necessary.
+#[derive(Debug, Clone)]
+pub struct MatrixBoard<T, S = ()> {
+    content: Vec<T>,
+    num_cols: usize,
+    num_rows: usize,
+    structure: S,
+}
+
+impl<T, S> MatrixBoard<T, S> {
+    fn calculate_index(&self, index: Index2D) -> Option<usize> {
+        if index.x <= self.num_cols && index.y <= self.num_rows {
+            Some(index.y * self.num_rows + index.x)
+        } else {
+            None
+        }
+    }
+
+    pub fn num_cols(&self) -> usize {
+        self.num_cols
+    }
+
+    pub fn num_rows(&self) -> usize {
+        self.num_rows
+    }
+}
+
+impl<T: Clone, S> MatrixBoard<T, S> {
+    pub fn from_value(num_cols: usize, num_rows: usize, val: T, structure: S) -> Self {
+        Self {
+            content: vec![val; num_cols * num_rows],
+            num_cols,
+            num_rows,
+            structure,
+        }
+    }
+}
+
+impl<T: Default, S> MatrixBoard<T, S> {
+    pub fn with_default(num_cols: usize, num_rows: usize, structure: S) -> Self {
+        Self {
+            content: iter::repeat_with(|| Default::default())
+                .take(num_cols * num_rows)
+                .collect(),
+            num_cols,
+            num_rows,
+            structure,
+        }
+    }
+}
+
+impl<T, S> Index<Index2D> for MatrixBoard<T, S> {
+    type Output = T;
+
+    fn index(&self, index: Index2D) -> &Self::Output {
+        let idx = self.calculate_index(index).unwrap();
+        self.content.index(idx)
+    }
+}
+
+impl<T, S> IndexMut<Index2D> for MatrixBoard<T, S> {
+    fn index_mut(&mut self, index: Index2D) -> &mut Self::Output {
+        let idx = self.calculate_index(index).unwrap();
+        self.content.index_mut(idx)
+    }
+}
+
+impl<T, S> BoardIndex<Index2D> for MatrixBoard<T, S> {
+    fn all_indices(&self) -> Vec<Index2D> {
+        (0..self.num_cols)
+            .zip(0..self.num_rows)
+            .map(|(x, y)| Index2D { x, y })
+            .collect()
+    }
+}
+
+impl<T, S> Board<Index2D> for MatrixBoard<T, S> {
+    type Structure = S;
+
+    fn size(&self) -> usize {
+        self.num_cols * self.num_rows
+    }
+
+    fn contains(&self, index: Index2D) -> bool {
+        self.calculate_index(index).is_some()
+    }
+
+    fn structure(&self) -> &Self::Structure {
+        &self.structure
+    }
+}
+
+impl<T, S> ContiguousBoard<Index2D> for MatrixBoard<T, S> {
+    fn bound(&self) -> Index2D {
+        Index2D {
+            x: self.num_cols,
+            y: self.num_rows,
+        }
+    }
+
+    fn wrapped(&self, index: Index2D) -> Index2D {
+        Index2D {
+            x: index.x % self.num_cols,
+            y: index.y % self.num_rows,
+        }
+    }
+}
+
 mod test {
     use super::*;
 
