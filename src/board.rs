@@ -3,8 +3,8 @@ pub mod directions;
 pub mod structures;
 
 use std::{
-    collections::HashSet, fmt::Debug, hash::Hash, iter::Copied, marker::PhantomData, ops::IndexMut,
-    slice::Iter, vec::IntoIter,
+    cmp::Ordering, collections::HashSet, fmt::Debug, hash::Hash, iter::Copied, marker::PhantomData,
+    ops::IndexMut, slice::Iter, vec::IntoIter,
 };
 
 // ----- trait definitions -----
@@ -121,9 +121,10 @@ implBoardIntoIter!(BoardIntoIter for BoardIter, into_iter, &'a T, get);
 
 // ----- extended board types -----
 
-// TODO spelling?
-pub trait ContiguousBoard<I: BoardIdxType + Ord>: Board<I> {
-    fn max(&self) -> I;
+// TODO do these methods belong together?
+pub trait ContiguousBoard<I: BoardIdxType + PartialOrd>: Board<I> {
+    // should return a smallest common bound, i.e. i < b.bound() for a board b and every i with b.contains(i)
+    fn bound(&self) -> I;
 
     fn wrapped(&self, index: I) -> I;
 
@@ -152,6 +153,20 @@ pub struct Index2D {
 }
 
 impl BoardIdxType for Index2D {}
+
+impl PartialOrd for Index2D {
+    fn partial_cmp(&self, other: &Index2D) -> Option<Ordering> {
+        if self.x == other.x && self.y == other.y {
+            Some(Ordering::Equal)
+        } else if self.x <= other.y && self.y <= other.y {
+            Some(Ordering::Less)
+        } else if self.x >= other.y && self.y >= other.y {
+            Some(Ordering::Greater)
+        } else {
+            None
+        }
+    }
+}
 
 // TOOD rather bad hack to enable iteration - enforce lifetime binding to self?
 // TODO should we use IndexMut?

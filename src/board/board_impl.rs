@@ -12,9 +12,9 @@ pub struct VecBoard<T, S = ()> {
 }
 
 impl<T: Clone, S> VecBoard<T, S> {
-    pub fn from_default(count: usize, def: T, structure: S) -> Self {
-        VecBoard {
-            content: vec![def; count],
+    pub fn from_value(count: usize, val: T, structure: S) -> Self {
+        Self {
+            content: vec![val; count],
             structure,
         }
     }
@@ -22,7 +22,7 @@ impl<T: Clone, S> VecBoard<T, S> {
 
 impl<T: Default, S> VecBoard<T, S> {
     pub fn with_default(count: usize, structure: S) -> Self {
-        VecBoard {
+        Self {
             content: iter::repeat_with(|| Default::default())
                 .take(count)
                 .collect(),
@@ -72,7 +72,7 @@ impl<T, S> Board<Index1D> for VecBoard<T, S> {
 }
 
 impl<T, S> ContiguousBoard<Index1D> for VecBoard<T, S> {
-    fn max(&self) -> Index1D {
+    fn bound(&self) -> Index1D {
         Index1D::from(self.content.len())
     }
 
