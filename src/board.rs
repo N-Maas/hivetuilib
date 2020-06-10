@@ -179,7 +179,7 @@ pub trait BoardIndex<I: BoardIdxType>: IndexMut<I> {
 
 // ----- field implementation -----
 
-#[derive(Debug, Eq, Copy)]
+#[derive(Debug, Eq)]
 pub struct Field<'a, I: BoardIdxType, B: Board<I> + ?Sized> {
     board: &'a B,
     index: I,
@@ -222,6 +222,8 @@ impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> Clone for Field<'a, I, B> {
         Field { ..*self }
     }
 }
+
+impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> Copy for Field<'a, I, B> {}
 
 impl<'a, I: BoardIdxType, S, B: Board<I, Structure = S> + ?Sized> Field<'a, I, B>
 where

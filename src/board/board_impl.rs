@@ -92,7 +92,7 @@ pub struct MatrixBoard<T, S = ()> {
 
 impl<T, S> MatrixBoard<T, S> {
     fn calculate_index(&self, index: Index2D) -> Option<usize> {
-        if index.x <= self.num_cols && index.y <= self.num_rows {
+        if index.x < self.num_cols && index.y < self.num_rows {
             Some(index.y * self.num_rows + index.x)
         } else {
             None
@@ -151,8 +151,7 @@ impl<T, S> IndexMut<Index2D> for MatrixBoard<T, S> {
 impl<T, S> BoardIndex<Index2D> for MatrixBoard<T, S> {
     fn all_indices(&self) -> Vec<Index2D> {
         (0..self.num_cols)
-            .zip(0..self.num_rows)
-            .map(|(x, y)| Index2D { x, y })
+            .flat_map(|x| (0..self.num_rows).map(move |y| Index2D { x, y }))
             .collect()
     }
 }
