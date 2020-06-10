@@ -92,6 +92,8 @@ impl OffsetableIndex for Index2D {
 
 // ----- direction implementations -----
 
+// TODO remove "Direction" from name?
+// a direction with two possibilities: Forward and Backward
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BinaryDirection {
     Forward,
@@ -125,6 +127,69 @@ impl DirectionEnumerable for BinaryDirection {
     }
 }
 
+// implement directions used for a two dimensions
+macro_rules! impl2DDirection {
+    ($name:ident[$num:literal] {
+        $($dir:ident($x_type:ident($x:literal), $y_type:ident($y:literal)) - $rev:ident),+ $(,)?
+     }) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+        pub enum $name {
+            $($dir,)+
+        }
+
+        impl DirectionOffset<(Offset, Offset)> for $name {
+            fn get_offset(&self) -> (Offset, Offset) {
+                match self {
+                    $($name::$dir => (Offset::$x_type($x), Offset::$y_type($y)),)+
+                }
+            }
+        }
+
+        impl DirectionReversable for $name {
+            fn reversed(&self) -> Self {
+                match self {
+                    $($name::$dir => $name::$rev,)+
+                }
+            }
+        }
+
+        impl DirectionEnumerable for $name {
+            type Iter = Copied<Iter<'static, $name>>;
+
+            fn enumerate_all() -> Self::Iter {
+                static DIRS: [$name; $num] = [
+                        $($name::$dir,)+
+                    ];
+                DIRS.iter().copied()
+            }
+        }
+    };
+}
+
+// TODO remove "Direction" from name?
+// a representing the directions in a grid, without diagonals
+impl2DDirection!(
+    GridDirection[4] {
+        Up(Pos(0), Pos(1)) - Down,
+        Right(Pos(1), Pos(0)) - Left,
+        Down(Pos(0), Neg(1)) - Up,
+        Left(Neg(1), Pos(0)) - Right,
+    }
+);
+
+// a representing the directions in a grid, including diagonals
+impl2DDirection!(
+    GridDiagDirection[8] {
+        Up(Pos(0), Pos(1)) - Down,
+        UpRight(Pos(1), Pos(1)) - DownLeft,
+        Right(Pos(1), Pos(0)) - Left,
+        DownRight(Pos(1), Neg(1)) - UpLeft,
+        Down(Pos(0), Neg(1)) - Up,
+        DownLeft(Neg(1), Neg(1)) - UpRight,
+        Left(Neg(1), Pos(0)) - Right,
+        UpLeft(Neg(1), Pos(1)) - DownRight,
+    }
+);
 
 mod test {
     use super::*;
