@@ -1,5 +1,6 @@
 pub mod board_impl;
 pub mod directions;
+pub mod search;
 pub mod structures;
 
 use std::{
