@@ -1,5 +1,6 @@
 use super::*;
 
+// TODO: move type parameter to associated type?
 pub trait DirectionOffset<O>: Copy + Eq {
     fn get_offset(&self) -> O;
 }
@@ -35,20 +36,10 @@ impl PartialOrd for Offset {
         match (self, other) {
             (Offset::Neg(a), Offset::Neg(b)) => Some(b.cmp(a)),
             (Offset::Pos(a), Offset::Pos(b)) => Some(a.cmp(b)),
-            (Offset::Pos(a), Offset::Neg(b)) => {
-                if *a == 0 && *b == 0 {
-                    Some(Ordering::Equal)
-                } else {
-                    Some(Ordering::Greater)
-                }
-            }
-            (Offset::Neg(a), Offset::Pos(b)) => {
-                if *a == 0 && *b == 0 {
-                    Some(Ordering::Equal)
-                } else {
-                    Some(Ordering::Less)
-                }
-            }
+            (Offset::Pos(0), Offset::Neg(0)) => Some(Ordering::Equal),
+            (Offset::Neg(0), Offset::Pos(0)) => Some(Ordering::Equal),
+            (Offset::Pos(_), Offset::Neg(_)) => Some(Ordering::Greater),
+            (Offset::Neg(_), Offset::Pos(_)) => Some(Ordering::Less),
         }
     }
 }

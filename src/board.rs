@@ -225,6 +225,12 @@ impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> Clone for Field<'a, I, B> {
 
 impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> Copy for Field<'a, I, B> {}
 
+impl<'a, T, I: BoardIdxType, B: Board<I, Output = Option<T>> + ?Sized> Field<'a, I, B> {
+    pub fn is_empty(&self) -> bool {
+        self.content().is_none()
+    }
+}
+
 impl<'a, I: BoardIdxType, S, B: Board<I, Structure = S> + ?Sized> Field<'a, I, B>
 where
     S: AdjacencyStructure<I, B>,

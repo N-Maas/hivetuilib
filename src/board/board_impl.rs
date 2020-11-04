@@ -5,6 +5,7 @@ use std::{
     ops::{Index, IndexMut},
 };
 
+// TODO: use Box<[T]> instead
 #[derive(Debug, Clone)]
 pub struct VecBoard<T, S = ()> {
     content: Vec<T>,
