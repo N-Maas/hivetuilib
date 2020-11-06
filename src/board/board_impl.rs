@@ -37,18 +37,20 @@ impl<T: Default, S> VecBoard<T, S> {
 impl<T, S> Index<Index1D> for VecBoard<T, S> {
     type Output = T;
 
-    fn index(&self, index: Index1D) -> &Self::Output {
+    fn index(&self, index: Index1D) -> &T {
         self.content.index(index.val)
     }
 }
 
 impl<T, S> IndexMut<Index1D> for VecBoard<T, S> {
-    fn index_mut(&mut self, index: Index1D) -> &mut Self::Output {
+    fn index_mut(&mut self, index: Index1D) -> &mut T {
         self.content.index_mut(index.val)
     }
 }
 
-impl<T, S> BoardIndex<Index1D> for VecBoard<T, S> {
+impl<T, S> BoardIndexable for VecBoard<T, S> {
+    type Index = Index1D;
+
     fn all_indices(&self) -> Vec<Index1D> {
         (0..self.content.len())
             .map(|val| Index1D::from(val))
@@ -56,7 +58,8 @@ impl<T, S> BoardIndex<Index1D> for VecBoard<T, S> {
     }
 }
 
-impl<T, S> Board<Index1D> for VecBoard<T, S> {
+impl<T, S> Board for VecBoard<T, S> {
+    type Content = T;
     type Structure = S;
 
     fn size(&self) -> usize {
@@ -67,12 +70,20 @@ impl<T, S> Board<Index1D> for VecBoard<T, S> {
         index.val < self.size()
     }
 
-    fn structure(&self) -> &Self::Structure {
+    fn structure(&self) -> &S {
         &self.structure
+    }
+
+    fn get(&self, index: Index1D) -> Option<&T> {
+        self.content.get(index.val)
+    }
+
+    fn get_mut(&mut self, index: Index1D) -> Option<&mut T> {
+        self.content.get_mut(index.val)
     }
 }
 
-impl<T, S> ContiguousBoard<Index1D> for VecBoard<T, S> {
+impl<T, S> ContiguousBoard for VecBoard<T, S> {
     fn bound(&self) -> Index1D {
         Index1D::from(self.content.len())
     }
@@ -136,20 +147,20 @@ impl<T: Default, S> MatrixBoard<T, S> {
 impl<T, S> Index<Index2D> for MatrixBoard<T, S> {
     type Output = T;
 
-    fn index(&self, index: Index2D) -> &Self::Output {
+    fn index(&self, index: Index2D) -> &T {
         let idx = self.calculate_index(index).unwrap();
         self.content.index(idx)
     }
 }
 
 impl<T, S> IndexMut<Index2D> for MatrixBoard<T, S> {
-    fn index_mut(&mut self, index: Index2D) -> &mut Self::Output {
-        let idx = self.calculate_index(index).unwrap();
-        self.content.index_mut(idx)
+    fn index_mut(&mut self, index: Index2D) -> &mut T {
+        self.get_mut(index).unwrap()
     }
 }
 
-impl<T, S> BoardIndex<Index2D> for MatrixBoard<T, S> {
+impl<T, S> BoardIndexable for MatrixBoard<T, S> {
+    type Index = Index2D;
     fn all_indices(&self) -> Vec<Index2D> {
         (0..self.num_cols)
             .flat_map(|x| (0..self.num_rows).map(move |y| Index2D { x, y }))
@@ -157,7 +168,8 @@ impl<T, S> BoardIndex<Index2D> for MatrixBoard<T, S> {
     }
 }
 
-impl<T, S> Board<Index2D> for MatrixBoard<T, S> {
+impl<T, S> Board for MatrixBoard<T, S> {
+    type Content = T;
     type Structure = S;
 
     fn size(&self) -> usize {
@@ -168,12 +180,22 @@ impl<T, S> Board<Index2D> for MatrixBoard<T, S> {
         self.calculate_index(index).is_some()
     }
 
-    fn structure(&self) -> &Self::Structure {
+    fn structure(&self) -> &S {
         &self.structure
+    }
+
+    fn get(&self, index: Index2D) -> Option<&T> {
+        let idx = self.calculate_index(index)?;
+        self.content.get(idx)
+    }
+
+    fn get_mut(&mut self, index: Index2D) -> Option<&mut T> {
+        let idx = self.calculate_index(index)?;
+        self.content.get_mut(idx)
     }
 }
 
-impl<T, S> ContiguousBoard<Index2D> for MatrixBoard<T, S> {
+impl<T, S> ContiguousBoard for MatrixBoard<T, S> {
     fn bound(&self) -> Index2D {
         Index2D {
             x: self.num_cols,

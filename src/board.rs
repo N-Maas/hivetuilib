@@ -5,59 +5,59 @@ pub mod structures;
 
 use std::{
     cmp::Ordering, collections::HashSet, fmt::Debug, hash::Hash, iter::Copied, marker::PhantomData,
-    ops::IndexMut, slice::Iter, vec::IntoIter,
+    slice::Iter, vec::IntoIter,
 };
 
 // ----- trait definitions -----
 
 pub trait BoardIdxType: Copy + Eq + Debug {}
 
-pub trait Board<I: BoardIdxType>: BoardIndex<I> {
+pub trait Board: BoardIndexable {
+    type Content;
     type Structure;
 
     fn size(&self) -> usize;
 
-    fn contains(&self, index: I) -> bool;
+    fn contains(&self, index: Self::Index) -> bool;
 
     fn structure(&self) -> &Self::Structure;
 
     // TODO better get_field_unchecked or similar?
-    fn field_at<'a>(&'a self, index: I) -> Field<'a, I, Self> {
+    fn field_at<'a>(&'a self, index: Self::Index) -> Field<'a, Self>
+    where
+        Self: Sized,
+    {
         self.get_field(index)
             .expect(&format!("invalid index: {:?}", index))
     }
 
-    fn get_field<'a>(&'a self, index: I) -> Option<Field<'a, I, Self>> {
+    fn get_field<'a>(&'a self, index: Self::Index) -> Option<Field<'a, Self>>
+    where
+        Self: Sized,
+    {
         Field::new(self, index)
     }
 
-    fn get(&self, index: I) -> Option<&Self::Output> {
-        if self.contains(index) {
-            Some(self.index(index))
-        } else {
-            None
-        }
-    }
+    fn get(&self, index: Self::Index) -> Option<&Self::Content>;
 
-    fn get_mut(&mut self, index: I) -> Option<&mut Self::Output> {
-        if self.contains(index) {
-            Some(self.index_mut(index))
-        } else {
-            None
-        }
-    }
+    fn get_mut(&mut self, index: Self::Index) -> Option<&mut Self::Content>;
 
-    fn iter_fields<'a>(&'a self) -> <&'a Self as BoardIntoFieldIter<I, Self::Output>>::IntoIter
+    fn iter_fields<'a>(
+        &'a self,
+    ) -> <&'a Self as BoardIntoFieldIter<Self::Index, Self::Content>>::IntoIter
     where
-        Self::Output: 'a,
+        Self: Sized,
+        Self::Content: 'a,
     {
         self.into_field_iter()
     }
 
     // TODO: required?
-    fn iter<'a>(&'a self) -> <&'a Self as BoardIntoIter<I, Self::Output>>::IntoIter
+    // TODO: iter_mut impossible to define in trait currently
+    fn iter<'a>(&'a self) -> <&'a Self as BoardIntoIter<Self::Index, Self::Content>>::IntoIter
     where
-        Self::Output: 'a,
+        Self: Sized,
+        Self::Content: 'a,
     {
         self.into_iter()
     }
@@ -67,19 +67,19 @@ pub trait Board<I: BoardIdxType>: BoardIndex<I> {
 
 macro_rules! implBoardIntoIter {
     ($trait:ident for $name:ident, $call:ident, $out:ty, $access:ident) => {
-        pub trait $trait<I, T: ?Sized> {
+        pub trait $trait<I, T> {
             type Output;
             type IntoIter: Iterator<Item = Self::Output>;
 
             fn $call(self) -> Self::IntoIter;
         }
 
-        impl<'a, I: BoardIdxType, T, B: Board<I, Output = T> + ?Sized> $trait<I, T> for &'a B
+        impl<'a, B: Board> $trait<B::Index, B::Content> for &'a B
         where
-            T: 'a + ?Sized,
+            B::Content: 'a,
         {
             type Output = $out;
-            type IntoIter = $name<'a, I, T, B>;
+            type IntoIter = $name<'a, B>;
 
             fn $call(self) -> Self::IntoIter {
                 Self::IntoIter {
@@ -90,16 +90,15 @@ macro_rules! implBoardIntoIter {
             }
         }
 
-        pub struct $name<'a, I: BoardIdxType, T: ?Sized, B: Board<I, Output = T> + ?Sized> {
+        pub struct $name<'a, B: Board> {
             board: &'a B,
-            iter: IntoIter<I>,
-            _f: PhantomData<T>,
+            iter: IntoIter<B::Index>,
+            _f: PhantomData<B::Content>,
         }
 
-        impl<'a, I: BoardIdxType, T, B: Board<I, Output = T> + ?Sized> Iterator
-            for $name<'a, I, T, B>
+        impl<'a, B: Board> Iterator for $name<'a, B>
         where
-            T: 'a + ?Sized,
+            B::Content: 'a,
         {
             type Item = $out;
 
@@ -116,18 +115,21 @@ macro_rules! implBoardIntoIter {
     };
 }
 
-implBoardIntoIter!(BoardIntoFieldIter for FieldIter, into_field_iter, Field<'a, I, B>, get_field);
+implBoardIntoIter!(BoardIntoFieldIter for FieldIter, into_field_iter, Field<'a, B>, get_field);
 
-implBoardIntoIter!(BoardIntoIter for BoardIter, into_iter, &'a T, get);
+implBoardIntoIter!(BoardIntoIter for BoardIter, into_iter, &'a B::Content, get);
 
 // ----- extended board types -----
 
 // TODO do these methods belong together?
-pub trait ContiguousBoard<I: BoardIdxType + PartialOrd>: Board<I> {
+pub trait ContiguousBoard: Board
+where
+    Self::Index: PartialOrd,
+{
     // should return a smallest common bound, i.e. i < b.bound() for a board b and every i with b.contains(i)
-    fn bound(&self) -> I;
+    fn bound(&self) -> Self::Index;
 
-    fn wrapped(&self, index: I) -> I;
+    fn wrapped(&self, index: Self::Index) -> Self::Index;
 
     // TODO: get_wrapped etc. helper functions?
 }
@@ -170,24 +172,25 @@ impl PartialOrd for Index2D {
 }
 
 // TOOD rather bad hack to enable iteration - enforce lifetime binding to self?
-// TODO should we use IndexMut?
 // #[unstable]
-pub trait BoardIndex<I: BoardIdxType>: IndexMut<I> {
-    fn all_indices(&self) -> Vec<I>;
+pub trait BoardIndexable {
+    type Index: BoardIdxType;
 
-    // fn enumerate_mut(&mut self) -> Vec<(I, &mut Self::Output)>;
+    fn all_indices(&self) -> Vec<Self::Index>;
+
+    // fn enumerate_mut(&mut self) -> Vec<(I, &mut Self::Content)>;
 }
 
 // ----- field implementation -----
 
 #[derive(Debug, Eq)]
-pub struct Field<'a, I: BoardIdxType, B: Board<I> + ?Sized> {
+pub struct Field<'a, B: Board> {
     board: &'a B,
-    index: I,
+    index: B::Index,
 }
 
-impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> Field<'a, I, B> {
-    pub fn new(board: &'a B, index: I) -> Option<Self> {
+impl<'a, B: Board> Field<'a, B> {
+    pub fn new(board: &'a B, index: B::Index) -> Option<Self> {
         if board.contains(index) {
             Some(Self { board, index })
         } else {
@@ -195,48 +198,52 @@ impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> Field<'a, I, B> {
         }
     }
 
-    pub fn index(&self) -> I {
+    pub fn board(&self) -> &B {
+        self.board
+    }
+
+    pub fn index(&self) -> B::Index {
         self.index
     }
 
-    pub fn content(&self) -> &B::Output {
+    pub fn content(&self) -> &B::Content {
         self.content_checked().expect(&format!(
             "Index of field is invalid: {:?} - perhaps the field was removed from the board?",
             self.index
         ))
     }
 
-    pub fn content_checked(&self) -> Option<&B::Output> {
+    pub fn content_checked(&self) -> Option<&B::Content> {
         self.board.get(self.index)
     }
 }
 
 // TODO good idea to compare pointer?
-impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> PartialEq for Field<'a, I, B> {
+impl<'a, B: Board> PartialEq for Field<'a, B> {
     fn eq(&self, other: &Self) -> bool {
         (self.board as *const B == other.board as *const B) && self.index == other.index
     }
 }
 
-impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> Clone for Field<'a, I, B> {
+impl<'a, B: Board> Clone for Field<'a, B> {
     fn clone(&self) -> Self {
         Field { ..*self }
     }
 }
 
-impl<'a, I: BoardIdxType, B: Board<I> + ?Sized> Copy for Field<'a, I, B> {}
+impl<'a, B: Board> Copy for Field<'a, B> {}
 
-impl<'a, T, I: BoardIdxType, B: Board<I, Output = Option<T>> + ?Sized> Field<'a, I, B> {
+impl<'a, T, B: Board<Content = Option<T>>> Field<'a, B> {
     pub fn is_empty(&self) -> bool {
         self.content().is_none()
     }
 }
 
-impl<'a, I: BoardIdxType, S, B: Board<I, Structure = S> + ?Sized> Field<'a, I, B>
+impl<'a, S, B: Board<Structure = S>> Field<'a, B>
 where
-    S: AdjacencyStructure<I, B>,
+    S: AdjacencyStructure<B>,
 {
-    pub fn is_adjacent_to(&self, index: I) -> bool {
+    pub fn is_adjacent_to(&self, index: B::Index) -> bool {
         self.board
             .structure()
             .is_adjacent(self.board, self.index, index)
@@ -247,9 +254,9 @@ where
     }
 }
 
-impl<'a, I: BoardIdxType, S, B: Board<I, Structure = S> + ?Sized> Field<'a, I, B>
+impl<'a, S, B: Board<Structure = S>> Field<'a, B>
 where
-    S: NeighborhoodStructure<I, B>,
+    S: NeighborhoodStructure<B>,
 {
     pub fn neighbor_count(&self) -> usize {
         self.board
@@ -257,7 +264,7 @@ where
             .neighbor_count(self.board, self.index)
     }
 
-    pub fn get_neighbors(&self) -> impl Iterator<Item = Field<'a, I, B>> {
+    pub fn get_neighbors(&self) -> impl Iterator<Item = Field<'a, B>> {
         let board = self.board;
         board
             .structure()
@@ -267,9 +274,9 @@ where
     }
 }
 
-impl<'a, I: BoardIdxType, S, B: Board<I, Structure = S> + ?Sized> Field<'a, I, B>
+impl<'a, S, B: Board<Structure = S>> Field<'a, B>
 where
-    S: DirectionStructure<I, B>,
+    S: DirectionStructure<B>,
 {
     pub fn next(&self, direction: S::Direction) -> Option<Self> {
         let board = self.board;
@@ -280,25 +287,25 @@ where
     }
 }
 
-pub trait AdjacencyStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
-    fn is_adjacent(&self, board: &B, i: I, j: I) -> bool;
+pub trait AdjacencyStructure<B: Board> {
+    fn is_adjacent(&self, board: &B, i: B::Index, j: B::Index) -> bool;
 }
 
-pub trait NeighborhoodStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
-    fn neighbor_count(&self, board: &B, index: I) -> usize {
+pub trait NeighborhoodStructure<B: Board> {
+    fn neighbor_count(&self, board: &B, index: B::Index) -> usize {
         self.get_neighbors(board, index).len()
     }
 
     // TODO more efficient than vec?
-    fn get_neighbors(&self, board: &B, index: I) -> Vec<I>;
+    fn get_neighbors(&self, board: &B, index: B::Index) -> Vec<B::Index>;
 }
 
-pub trait DirectionStructure<I: BoardIdxType, B: Board<I> + ?Sized> {
+pub trait DirectionStructure<B: Board> {
     type Direction: Copy + Eq;
 
-    fn has_next(&self, board: &B, index: I, direction: Self::Direction) -> bool {
+    fn has_next(&self, board: &B, index: B::Index, direction: Self::Direction) -> bool {
         self.next(board, index, direction).is_some()
     }
 
-    fn next(&self, board: &B, index: I, direction: Self::Direction) -> Option<I>;
+    fn next(&self, board: &B, index: B::Index, direction: Self::Direction) -> Option<B::Index>;
 }
