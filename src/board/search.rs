@@ -60,22 +60,68 @@ impl<I: BoardIdxType + Hash> IndexSet for HashIndexSet<I> {
     }
 }
 
+pub trait BoardToSet {
+    type Set: IndexSet;
+
+    fn get_index_set(&self) -> Self::Set;
+}
+
+impl<T, S> BoardToSet for board_impl::VecBoard<T, S> {
+    type Set = HashIndexSet<Index1D>;
+
+    fn get_index_set(&self) -> Self::Set {
+        Self::Set::new()
+    }
+}
+
+impl<T, S> BoardToSet for board_impl::MatrixBoard<T, S> {
+    type Set = HashIndexSet<Index2D>;
+
+    fn get_index_set(&self) -> Self::Set {
+        Self::Set::new()
+    }
+}
+
 pub trait Searchable {
     type Set: IndexSet;
-    type Board: Board<<Self::Set as IndexSet>::IndexType>;
+    type Board: Board<Index = <Self::Set as IndexSet>::IndexType>;
 
     fn search(&self) -> SearchingSet<'_, Self::Set, Self::Board>;
 }
 
-// TODO: Searchable implementations by hand..
+impl<B: BoardToSet> Searchable for B
+where
+    B: Board<Index = <<B as BoardToSet>::Set as IndexSet>::IndexType>,
+{
+    type Set = <Self as BoardToSet>::Set;
+    type Board = B;
+
+    fn search(&self) -> SearchingSet<'_, Self::Set, Self::Board> {
+        SearchingSet::new(self.get_index_set(), self)
+    }
+}
+
+impl<B: BoardToSet> Searchable for Field<'_, B>
+where
+    B: Board<Index = <<B as BoardToSet>::Set as IndexSet>::IndexType>,
+{
+    type Set = <B as BoardToSet>::Set;
+    type Board = B;
+
+    fn search(&self) -> SearchingSet<'_, Self::Set, Self::Board> {
+        let mut set = self.board().search();
+        set.insert(*self);
+        set
+    }
+}
 
 #[derive(Debug)]
-pub struct SearchingSet<'a, S: IndexSet, B: Board<S::IndexType>> {
+pub struct SearchingSet<'a, S: IndexSet, B: Board<Index = S::IndexType>> {
     base_set: S,
     board: &'a B,
 }
 
-impl<'a, S: IndexSet, B: Board<S::IndexType>> SearchingSet<'a, S, B> {
+impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
     pub fn new(base_set: S, board: &'a B) -> Self {
         Self { base_set, board }
     }
@@ -84,17 +130,22 @@ impl<'a, S: IndexSet, B: Board<S::IndexType>> SearchingSet<'a, S, B> {
         self.base_set.size()
     }
 
-    pub fn contains(&self, i: S::IndexType) -> bool {
-        self.base_set.contains(i)
+    pub fn contains(&self, f: Field<'_, B>) -> bool {
+        self.base_set.contains(f.index())
     }
 
-    pub fn insert(&mut self, i: S::IndexType) -> bool {
-        self.base_set.insert(i)
+    pub fn insert(&mut self, f: Field<'_, B>) -> bool {
+        if !self.board.contains(f.index()) {
+            panic!("Field with invalid index.");
+        }
+        self.base_set.insert(f.index())
     }
 
     // TODO: this is a bit ugly, waiting for GATs..
-    pub fn iter(&self) -> S::Iter {
-        self.base_set.iter()
+    pub fn iter(&self) -> impl Iterator<Item = Field<'_, B>> {
+        self.base_set
+            .iter()
+            .map(move |i| self.board.get_field(i).unwrap())
     }
 
     pub fn clear(&mut self) {
