@@ -82,35 +82,35 @@ impl<T, S> BoardToSet for board_impl::MatrixBoard<T, S> {
     }
 }
 
-pub trait Searchable {
+pub trait Searchable<'a> {
     type Set: IndexSet;
     type Board: Board<Index = <Self::Set as IndexSet>::IndexType>;
 
-    fn search(&self) -> SearchingSet<'_, Self::Set, Self::Board>;
+    fn search(self) -> SearchingSet<'a, Self::Set, Self::Board>;
 }
 
-impl<B: BoardToSet> Searchable for B
-where
-    B: Board<Index = <<B as BoardToSet>::Set as IndexSet>::IndexType>,
-{
-    type Set = <Self as BoardToSet>::Set;
-    type Board = B;
-
-    fn search(&self) -> SearchingSet<'_, Self::Set, Self::Board> {
-        SearchingSet::new(self.get_index_set(), self)
-    }
-}
-
-impl<B: BoardToSet> Searchable for Field<'_, B>
+impl<'a, B: BoardToSet> Searchable<'a> for &'a B
 where
     B: Board<Index = <<B as BoardToSet>::Set as IndexSet>::IndexType>,
 {
     type Set = <B as BoardToSet>::Set;
     type Board = B;
 
-    fn search(&self) -> SearchingSet<'_, Self::Set, Self::Board> {
+    fn search(self) -> SearchingSet<'a, Self::Set, Self::Board> {
+        SearchingSet::new(self.get_index_set(), self)
+    }
+}
+
+impl<'a, B: BoardToSet> Searchable<'a> for Field<'a, B>
+where
+    B: Board<Index = <<B as BoardToSet>::Set as IndexSet>::IndexType>,
+{
+    type Set = <B as BoardToSet>::Set;
+    type Board = B;
+
+    fn search(self) -> SearchingSet<'a, Self::Set, Self::Board> {
         let mut set = self.board().search();
-        set.insert(*self);
+        set.insert(self);
         set
     }
 }

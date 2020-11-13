@@ -149,6 +149,12 @@ impl From<usize> for Index1D {
     }
 }
 
+impl<B: Board<Index = Index1D>> From<Field<'_, B>> for Index1D {
+    fn from(f: Field<'_, B>) -> Self {
+        f.index()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Index2D {
     pub x: usize,
@@ -156,6 +162,12 @@ pub struct Index2D {
 }
 
 impl BoardIdxType for Index2D {}
+
+impl<B: Board<Index = Index2D>> From<Field<'_, B>> for Index2D {
+    fn from(f: Field<'_, B>) -> Self {
+        f.index()
+    }
+}
 
 impl PartialOrd for Index2D {
     fn partial_cmp(&self, other: &Index2D) -> Option<Ordering> {
@@ -198,7 +210,7 @@ impl<'a, B: Board> Field<'a, B> {
         }
     }
 
-    pub fn board(&self) -> &B {
+    pub fn board(&self) -> &'a B {
         self.board
     }
 
@@ -206,14 +218,14 @@ impl<'a, B: Board> Field<'a, B> {
         self.index
     }
 
-    pub fn content(&self) -> &B::Content {
+    pub fn content(&self) -> &'a B::Content {
         self.content_checked().expect(&format!(
             "Index of field is invalid: {:?} - perhaps the field was removed from the board?",
             self.index
         ))
     }
 
-    pub fn content_checked(&self) -> Option<&B::Content> {
+    pub fn content_checked(&self) -> Option<&'a B::Content> {
         self.board.get(self.index)
     }
 }
