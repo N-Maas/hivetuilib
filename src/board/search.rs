@@ -1,3 +1,5 @@
+use std::iter::FromIterator;
+
 use super::*;
 
 pub trait IndexSet {
@@ -115,6 +117,23 @@ where
     }
 }
 
+impl<'a, B: BoardToSet + 'a> FromIterator<Field<'a, B>> for Option<SearchingSet<'a, B::Set, B>>
+where
+    B: Board<Index = <<B as BoardToSet>::Set as IndexSet>::IndexType>,
+{
+    fn from_iter<T: IntoIterator<Item = Field<'a, B>>>(iter: T) -> Self {
+        let mut iter = iter.into_iter();
+        let first = iter.next();
+        first.map(|f| {
+            let mut set = f.search();
+            for field in iter {
+                set.insert(field);
+            }
+            set
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct SearchingSet<'a, S: IndexSet, B: Board<Index = S::IndexType>> {
     base_set: S,
@@ -151,4 +170,145 @@ impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
     pub fn clear(&mut self) {
         self.base_set.clear()
     }
+
+    // ----- the search API -----
+    pub fn extend<F>(&mut self, mut map_fields: F) -> bool
+    where
+        F: FnMut(Field<B>) -> FieldSearchResult<B::Index>,
+    {
+        self.extend_helper(self.iter().flat_map(|f| map_fields(f)).collect())
+    }
+
+    pub fn extend_repeated<F>(&mut self, mut map_fields: F) -> bool
+    where
+        F: FnMut(Field<B>) -> FieldSearchResult<B::Index>,
+    {
+        let mut success = false;
+        while self.extend(&mut map_fields) {
+            success = true;
+        }
+        success
+    }
+
+    pub fn extend_with<F>(&mut self, collect: F) -> bool
+    where
+        F: FnOnce(&Self) -> FieldSearchResult<B::Index>,
+    {
+        self.extend_helper(collect(self))
+    }
+
+    pub fn extend_with_repeated<F>(&mut self, mut collect: F) -> bool
+    where
+        F: FnMut(&Self) -> FieldSearchResult<B::Index>,
+    {
+        let mut success = false;
+        while self.extend_with(&mut collect) {
+            success = true;
+        }
+        success
+    }
+
+    pub fn grow<F>(&mut self, predicate: F) -> bool
+    where
+        F: Fn(&Field<B>) -> bool,
+        B::Structure: NeighborhoodStructure<B>,
+    {
+        self.extend_helper(
+            self.iter()
+                .flat_map(|f| f.get_neighbors().filter(&predicate))
+                .map(|f| f.index())
+                .collect(),
+        )
+    }
+
+    pub fn grow_repeated<F>(&mut self, predicate: F) -> bool
+    where
+        F: Fn(&Field<B>) -> bool,
+        B::Structure: NeighborhoodStructure<B>,
+    {
+        let mut success = false;
+        while self.grow(&predicate) {
+            success = true;
+        }
+        success
+    }
+
+    pub fn replace<F>(&mut self, mut map_fields: F)
+    where
+        F: FnMut(Field<B>) -> FieldSearchResult<B::Index>,
+    {
+        self.replace_helper(self.iter().flat_map(|f| map_fields(f)).collect())
+    }
+
+    pub fn replace_with<F>(&mut self, collect: F)
+    where
+        F: FnOnce(&Self) -> FieldSearchResult<B::Index>,
+    {
+        self.replace_helper(collect(self))
+    }
+
+    pub fn step<F>(&mut self, predicate: F)
+    where
+        F: Fn(&Field<B>) -> bool,
+        B::Structure: NeighborhoodStructure<B>,
+    {
+        self.replace_helper(
+            self.iter()
+                .flat_map(|f| f.get_neighbors().filter(&predicate))
+                .map(|f| f.index())
+                .collect(),
+        )
+    }
+
+    fn extend_helper(&mut self, fields: FieldSearchResult<B::Index>) -> bool {
+        let mut success = false;
+        for i in fields {
+            self.base_set.insert(i);
+            success = true;
+        }
+        success
+    }
+
+    fn replace_helper(&mut self, fields: FieldSearchResult<B::Index>) {
+        self.base_set.clear();
+        for i in fields {
+            self.base_set.insert(i);
+        }
+    }
 }
+
+pub struct FieldSearchResult<I: BoardIdxType> {
+    data: IntoIter<I>,
+}
+
+impl<I: BoardIdxType, T: Into<I>> FromIterator<T> for FieldSearchResult<I> {
+    fn from_iter<Iter: IntoIterator<Item = T>>(iter: Iter) -> Self {
+        Self {
+            data: iter
+                .into_iter()
+                .map(|val| val.into())
+                .collect::<Vec<_>>()
+                .into_iter(),
+        }
+    }
+}
+
+impl<I: BoardIdxType, T: Into<I>> From<Vec<T>> for FieldSearchResult<I> {
+    fn from(vec: Vec<T>) -> Self {
+        Self::from_iter(vec.into_iter())
+    }
+}
+
+impl<I: BoardIdxType> Iterator for FieldSearchResult<I> {
+    type Item = I;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.data.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.data.size_hint()
+    }
+}
+
+impl<I: BoardIdxType> ExactSizeIterator for FieldSearchResult<I> {}
