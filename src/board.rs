@@ -282,11 +282,11 @@ where
             .neighbor_count(self.board, self.index)
     }
 
-    pub fn get_neighbors(&self) -> impl Iterator<Item = Field<'a, B>> {
+    pub fn neighbors(&self) -> impl Iterator<Item = Field<'a, B>> {
         let board = self.board;
         board
             .structure()
-            .get_neighbors(board, self.index)
+            .neighbors(board, self.index)
             .into_iter()
             .filter_map(move |i| Self::new(board, i))
     }
@@ -311,11 +311,11 @@ pub trait AdjacencyStructure<B: Board> {
 
 pub trait NeighborhoodStructure<B: Board> {
     fn neighbor_count(&self, board: &B, index: B::Index) -> usize {
-        self.get_neighbors(board, index).len()
+        self.neighbors(board, index).len()
     }
 
     // TODO more efficient than vec?
-    fn get_neighbors(&self, board: &B, index: B::Index) -> Vec<B::Index>;
+    fn neighbors(&self, board: &B, index: B::Index) -> Vec<B::Index>;
 }
 
 pub trait DirectionStructure<B: Board> {

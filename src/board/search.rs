@@ -235,7 +235,7 @@ impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
         B::Structure: NeighborhoodStructure<B>,
     {
         self.extend_repeated(|f| {
-            f.get_neighbors()
+            f.neighbors()
                 .filter(&predicate)
                 .map(|f| f.index())
                 .collect()
@@ -289,7 +289,7 @@ impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
         B::Structure: NeighborhoodStructure<B>,
     {
         self.iter()
-            .flat_map(|f| f.get_neighbors().filter(&predicate))
+            .flat_map(|f| f.neighbors().filter(&predicate))
             .map(|f| f.index())
             .collect()
     }

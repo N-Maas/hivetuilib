@@ -56,7 +56,7 @@ macro_rules! implNeighborhoodStructure {
                 .count()
         }
 
-        fn get_neighbors(&self, board: &B, index: B::Index) -> Vec<B::Index> {
+        fn neighbors(&self, board: &B, index: B::Index) -> Vec<B::Index> {
             D::enumerate_all()
                 .filter_map(|d| self.next(board, index, d))
                 .filter(|i| board.contains(*i))
