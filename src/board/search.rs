@@ -343,3 +343,26 @@ impl<I: BoardIdxType> IntoIterator for FieldSearchResult<I> {
         self.data.into_iter()
     }
 }
+
+mod test {
+    use super::*;
+
+    #[test]
+    fn search_repeated_test() {
+        use crate::board::board_impl::MatrixBoard;
+        use crate::board::directions::GridDirection;
+        use crate::board::structures::WrappedOffsetStructure;
+        let board =
+            MatrixBoard::<usize, WrappedOffsetStructure<Index2D, GridDirection>>::with_default(
+                2,
+                2,
+                WrappedOffsetStructure::new(),
+            );
+        let mut search = board.iter_fields().nth(0).unwrap().search();
+        assert!(search.grow_repeated(|_| true));
+        assert_eq!(search.size(), 4);
+        for &(x, y) in [(0, 0), (0, 1), (1, 0), (1, 1)].iter() {
+            assert!(search.contains(board.get_field(Index2D { x, y }).unwrap()));
+        }
+    }
+}
