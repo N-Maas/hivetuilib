@@ -34,17 +34,17 @@ impl<T: Default, S> VecBoard<T, S> {
 
 // TODO: builder
 
-impl<T, S> Index<Index1D> for VecBoard<T, S> {
+impl<T, I: Into<Index1D>, S> Index<I> for VecBoard<T, S> {
     type Output = T;
 
-    fn index(&self, index: Index1D) -> &T {
-        self.content.index(index.val)
+    fn index(&self, index: I) -> &T {
+        self.content.index(index.into().val)
     }
 }
 
-impl<T, S> IndexMut<Index1D> for VecBoard<T, S> {
-    fn index_mut(&mut self, index: Index1D) -> &mut T {
-        self.content.index_mut(index.val)
+impl<T, I: Into<Index1D>, S> IndexMut<I> for VecBoard<T, S> {
+    fn index_mut(&mut self, index: I) -> &mut T {
+        self.content.index_mut(index.into().val)
     }
 }
 
@@ -144,18 +144,17 @@ impl<T: Default, S> MatrixBoard<T, S> {
     }
 }
 
-impl<T, S> Index<Index2D> for MatrixBoard<T, S> {
+impl<T, I: Into<Index2D>, S> Index<I> for MatrixBoard<T, S> {
     type Output = T;
 
-    fn index(&self, index: Index2D) -> &T {
-        let idx = self.calculate_index(index).unwrap();
-        self.content.index(idx)
+    fn index(&self, index: I) -> &T {
+        self.get(index.into()).expect("Index out of bounds.")
     }
 }
 
-impl<T, S> IndexMut<Index2D> for MatrixBoard<T, S> {
-    fn index_mut(&mut self, index: Index2D) -> &mut T {
-        self.get_mut(index).unwrap()
+impl<T, I: Into<Index2D>, S> IndexMut<I> for MatrixBoard<T, S> {
+    fn index_mut(&mut self, index: I) -> &mut T {
+        self.get_mut(index.into()).expect("Index out of bounds.")
     }
 }
 
@@ -218,6 +217,13 @@ mod test {
     fn vec_board_test() {
         let board = VecBoard::<usize, ()>::with_default(1, ());
         assert_eq!(board.size(), 1);
-        assert_eq!(board.get(Index1D::from(0)), Some(&0));
+        assert_eq!(board[0], 0);
+    }
+
+    #[test]
+    fn matrix_board_test() {
+        let board = MatrixBoard::<usize, ()>::with_default(2, 2, ());
+        assert_eq!(board.size(), 4);
+        assert_eq!(board[(1, 1)], 0);
     }
 }

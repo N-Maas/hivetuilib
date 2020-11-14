@@ -116,12 +116,12 @@ where
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct WrappedOffsetStructure<I: OffsetableIndex + Ord, D: DirectionOffset<I::Offset>> {
+pub struct WrappedOffsetStructure<I: OffsetableIndex + PartialOrd, D: DirectionOffset<I::Offset>> {
     _i: PhantomData<I>,
     _d: PhantomData<D>,
 }
 
-impl<I: OffsetableIndex + Ord, D: DirectionOffset<I::Offset>> WrappedOffsetStructure<I, D> {
+impl<I: OffsetableIndex + PartialOrd, D: DirectionOffset<I::Offset>> WrappedOffsetStructure<I, D> {
     pub fn new() -> Self {
         Self {
             _i: PhantomData,
@@ -133,7 +133,7 @@ impl<I: OffsetableIndex + Ord, D: DirectionOffset<I::Offset>> WrappedOffsetStruc
 impl<B: ContiguousBoard, D: DirectionOffset<<B::Index as OffsetableIndex>::Offset>>
     DirectionStructure<B> for WrappedOffsetStructure<B::Index, D>
 where
-    B::Index: OffsetableIndex + Ord,
+    B::Index: OffsetableIndex + PartialOrd,
 {
     type Direction = D;
 
@@ -149,7 +149,7 @@ where
 impl<B: ContiguousBoard, D: DirectionOffset<<B::Index as OffsetableIndex>::Offset>>
     AdjacencyStructure<B> for WrappedOffsetStructure<B::Index, D>
 where
-    B::Index: OffsetableIndex + Ord,
+    B::Index: OffsetableIndex + PartialOrd,
     D: DirectionEnumerable,
 {
     implAdjacencyStructure!();
@@ -158,7 +158,7 @@ where
 impl<B: ContiguousBoard, D: DirectionOffset<<B::Index as OffsetableIndex>::Offset>>
     NeighborhoodStructure<B> for WrappedOffsetStructure<B::Index, D>
 where
-    B::Index: OffsetableIndex + Ord,
+    B::Index: OffsetableIndex + PartialOrd,
     D: DirectionEnumerable,
 {
     implNeighborhoodStructure!();

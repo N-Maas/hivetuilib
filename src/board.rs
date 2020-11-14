@@ -163,6 +163,12 @@ pub struct Index2D {
 
 impl BoardIdxType for Index2D {}
 
+impl From<(usize, usize)> for Index2D {
+    fn from((x, y): (usize, usize)) -> Self {
+        Self { x, y }
+    }
+}
+
 impl<B: Board<Index = Index2D>> From<Field<'_, B>> for Index2D {
     fn from(f: Field<'_, B>) -> Self {
         f.index()
