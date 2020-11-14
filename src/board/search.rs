@@ -154,10 +154,7 @@ impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
     }
 
     pub fn insert(&mut self, f: Field<'_, B>) -> bool {
-        if !self.board.contains(f.index()) {
-            panic!("Field with invalid index.");
-        }
-        self.base_set.insert(f.index())
+        self.base_insert(f.index())
     }
 
     // TODO: this is a bit ugly, waiting for GATs..
@@ -172,22 +169,38 @@ impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
     }
 
     // ----- the search API -----
-    pub fn extend<F>(&mut self, mut map_fields: F) -> bool
+    pub fn extend<F>(&mut self, map_fields: F) -> bool
     where
         F: FnMut(Field<B>) -> FieldSearchResult<B::Index>,
     {
-        self.extend_helper(self.iter().flat_map(|f| map_fields(f)).collect())
+        self.extend_helper(Self::apply_mapping(self.iter(), map_fields))
     }
 
-    pub fn extend_repeated<F>(&mut self, mut map_fields: F) -> bool
+    /// The closure must not use interior mutability.
+    pub fn extend_repeated<F>(&mut self, map_fields: F) -> bool
     where
-        F: FnMut(Field<B>) -> FieldSearchResult<B::Index>,
+        F: Fn(Field<B>) -> FieldSearchResult<B::Index>,
     {
         let mut success = false;
-        while self.extend(&mut map_fields) {
-            success = true;
+        let mut result = Self::apply_mapping(self.iter(), &map_fields);
+        let mut queued = Vec::new();
+        loop {
+            queued.clear();
+            // insert into set and queue in parallel
+            queued.extend(result.iter().filter(|i| self.base_insert(*i)));
+            if queued.is_empty() {
+                return success;
+            } else {
+                success = true;
+            }
+
+            // only read the values from the last iteration to avoid quadratic complexity
+            result = Self::apply_mapping(
+                // unwrap can not fail as the index was checked in base_insert
+                queued.iter().map(|i| self.board.get_field(*i).unwrap()),
+                &map_fields,
+            );
         }
-        success
     }
 
     pub fn extend_with<F>(&mut self, collect: F) -> bool
@@ -213,12 +226,7 @@ impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
         F: Fn(&Field<B>) -> bool,
         B::Structure: NeighborhoodStructure<B>,
     {
-        self.extend_helper(
-            self.iter()
-                .flat_map(|f| f.get_neighbors().filter(&predicate))
-                .map(|f| f.index())
-                .collect(),
-        )
+        self.extend_helper(self.apply_growth(predicate))
     }
 
     pub fn grow_repeated<F>(&mut self, predicate: F) -> bool
@@ -226,18 +234,20 @@ impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
         F: Fn(&Field<B>) -> bool,
         B::Structure: NeighborhoodStructure<B>,
     {
-        let mut success = false;
-        while self.grow(&predicate) {
-            success = true;
-        }
-        success
+        self.extend_repeated(|f| {
+            f.get_neighbors()
+                .filter(&predicate)
+                .map(|f| f.index())
+                .collect()
+        })
     }
 
-    pub fn replace<F>(&mut self, mut map_fields: F)
+    pub fn replace<F>(&mut self, map_fields: F)
     where
         F: FnMut(Field<B>) -> FieldSearchResult<B::Index>,
     {
-        self.replace_helper(self.iter().flat_map(|f| map_fields(f)).collect())
+        let fields = Self::apply_mapping(self.iter(), map_fields);
+        self.replace_helper(fields)
     }
 
     pub fn replace_with<F>(&mut self, collect: F)
@@ -252,18 +262,42 @@ impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
         F: Fn(&Field<B>) -> bool,
         B::Structure: NeighborhoodStructure<B>,
     {
-        self.replace_helper(
-            self.iter()
-                .flat_map(|f| f.get_neighbors().filter(&predicate))
-                .map(|f| f.index())
-                .collect(),
-        )
+        self.replace_helper(self.apply_growth(predicate))
+    }
+
+    fn base_insert(&mut self, i: B::Index) -> bool {
+        if !self.board.contains(i) {
+            panic!("Field with invalid index.");
+        }
+        self.base_set.insert(i)
+    }
+
+    fn apply_mapping<'b, F>(
+        iter: impl Iterator<Item = Field<'b, B>>,
+        mut map_fields: F,
+    ) -> FieldSearchResult<B::Index>
+    where
+        F: FnMut(Field<B>) -> FieldSearchResult<B::Index>,
+        B: 'b,
+    {
+        iter.flat_map(|f| map_fields(f).into_iter()).collect()
+    }
+
+    fn apply_growth<F>(&self, predicate: F) -> FieldSearchResult<B::Index>
+    where
+        F: Fn(&Field<B>) -> bool,
+        B::Structure: NeighborhoodStructure<B>,
+    {
+        self.iter()
+            .flat_map(|f| f.get_neighbors().filter(&predicate))
+            .map(|f| f.index())
+            .collect()
     }
 
     fn extend_helper(&mut self, fields: FieldSearchResult<B::Index>) -> bool {
         let mut success = false;
-        for i in fields {
-            self.base_set.insert(i);
+        for i in fields.iter() {
+            self.base_insert(i);
             success = true;
         }
         success
@@ -271,24 +305,26 @@ impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
 
     fn replace_helper(&mut self, fields: FieldSearchResult<B::Index>) {
         self.base_set.clear();
-        for i in fields {
-            self.base_set.insert(i);
+        for i in fields.iter() {
+            self.base_insert(i);
         }
     }
 }
 
 pub struct FieldSearchResult<I: BoardIdxType> {
-    data: IntoIter<I>,
+    data: Vec<I>,
+}
+
+impl<I: BoardIdxType> FieldSearchResult<I> {
+    fn iter(&self) -> impl Iterator<Item = I> + '_ {
+        self.data.iter().copied()
+    }
 }
 
 impl<I: BoardIdxType, T: Into<I>> FromIterator<T> for FieldSearchResult<I> {
     fn from_iter<Iter: IntoIterator<Item = T>>(iter: Iter) -> Self {
         Self {
-            data: iter
-                .into_iter()
-                .map(|val| val.into())
-                .collect::<Vec<_>>()
-                .into_iter(),
+            data: iter.into_iter().map(|val| val.into()).collect(),
         }
     }
 }
@@ -299,16 +335,11 @@ impl<I: BoardIdxType, T: Into<I>> From<Vec<T>> for FieldSearchResult<I> {
     }
 }
 
-impl<I: BoardIdxType> Iterator for FieldSearchResult<I> {
+impl<I: BoardIdxType> IntoIterator for FieldSearchResult<I> {
     type Item = I;
+    type IntoIter = IntoIter<I>;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.data.next()
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.data.size_hint()
+    fn into_iter(self) -> Self::IntoIter {
+        self.data.into_iter()
     }
 }
-
-impl<I: BoardIdxType> ExactSizeIterator for FieldSearchResult<I> {}
