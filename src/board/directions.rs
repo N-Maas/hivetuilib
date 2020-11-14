@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use super::*;
 
 // TODO: move type parameter to associated type?
@@ -19,65 +21,71 @@ pub trait DirectionEnumerable: Copy + Eq + Sized {
 // TODO: trait for direction -> index mapping (efficient structure)
 // TODO: derive macro for Enumerable/index mapping
 
-#[derive(Debug, Clone, Copy, Eq)]
-pub enum Offset {
-    Neg(usize),
-    Pos(usize),
-}
-
-impl PartialEq for Offset {
-    fn eq(&self, other: &Offset) -> bool {
-        self.cmp(other) == Ordering::Equal
-    }
-}
-
-impl PartialOrd for Offset {
-    fn partial_cmp(&self, other: &Offset) -> Option<Ordering> {
-        match (self, other) {
-            (Offset::Neg(a), Offset::Neg(b)) => Some(b.cmp(a)),
-            (Offset::Pos(a), Offset::Pos(b)) => Some(a.cmp(b)),
-            (Offset::Pos(0), Offset::Neg(0)) => Some(Ordering::Equal),
-            (Offset::Neg(0), Offset::Pos(0)) => Some(Ordering::Equal),
-            (Offset::Pos(_), Offset::Neg(_)) => Some(Ordering::Greater),
-            (Offset::Neg(_), Offset::Pos(_)) => Some(Ordering::Less),
-        }
-    }
-}
-
-impl Ord for Offset {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap()
-    }
-}
-
-fn apply_offset(n: usize, offset: Offset) -> Option<usize> {
-    match offset {
-        Offset::Pos(offset) => n.checked_add(offset),
-        Offset::Neg(offset) => n.checked_sub(offset),
-    }
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Offset(pub isize);
 
 pub trait OffsetableIndex: BoardIdxType {
     type Offset;
 
-    fn apply_offset(&self, offset: Self::Offset) -> Option<Self>;
+    fn apply_offset(&self, offset: Self::Offset) -> Self::Offset;
+
+    fn from_offset(index: Self::Offset) -> Option<Self>;
 }
 
 impl OffsetableIndex for Index1D {
     type Offset = Offset;
 
-    fn apply_offset(&self, offset: Offset) -> Option<Self> {
-        apply_offset(self.val, offset).map(|val| Self::from(val))
+    fn apply_offset(&self, Offset(delta): Offset) -> Offset {
+        Offset(self.val as isize + delta)
+    }
+
+    fn from_offset(Offset(index): Offset) -> Option<Self> {
+        if index >= 0 {
+            Some(Self::from(index as usize))
+        } else {
+            None
+        }
+    }
+}
+
+impl<D> Add<D> for Index1D
+where
+    D: DirectionOffset<<Self as OffsetableIndex>::Offset>,
+{
+    type Output = <Self as OffsetableIndex>::Offset;
+
+    fn add(self, rhs: D) -> Self::Output {
+        self.apply_offset(rhs.get_offset())
     }
 }
 
 impl OffsetableIndex for Index2D {
     type Offset = (Offset, Offset);
 
-    fn apply_offset(&self, offset: (Offset, Offset)) -> Option<Self> {
-        let x = apply_offset(self.x, offset.0)?;
-        let y = apply_offset(self.y, offset.1)?;
-        Some(Self { x, y })
+    fn apply_offset(&self, (Offset(dx), Offset(dy)): (Offset, Offset)) -> (Offset, Offset) {
+        (Offset(self.x as isize + dx), Offset(self.y as isize + dy))
+    }
+
+    fn from_offset((Offset(x), Offset(y)): (Offset, Offset)) -> Option<Self> {
+        if x >= 0 && y >= 0 {
+            Some(Self {
+                x: x as usize,
+                y: y as usize,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl<D> Add<D> for Index2D
+where
+    D: DirectionOffset<<Self as OffsetableIndex>::Offset>,
+{
+    type Output = <Self as OffsetableIndex>::Offset;
+
+    fn add(self, rhs: D) -> Self::Output {
+        self.apply_offset(rhs.get_offset())
     }
 }
 
@@ -94,8 +102,8 @@ pub enum BinaryDirection {
 impl DirectionOffset<Offset> for BinaryDirection {
     fn get_offset(&self) -> Offset {
         match self {
-            BinaryDirection::Forward => Offset::Pos(1),
-            BinaryDirection::Backward => Offset::Neg(1),
+            BinaryDirection::Forward => Offset(1),
+            BinaryDirection::Backward => Offset(-1),
         }
     }
 }
@@ -121,7 +129,7 @@ impl DirectionEnumerable for BinaryDirection {
 // implement directions used for a two dimensions
 macro_rules! impl2DDirection {
     ($name:ident[$num:literal] {
-        $($dir:ident($x_type:ident($x:literal), $y_type:ident($y:literal)) - $rev:ident),+ $(,)?
+        $($dir:ident($x:literal, $y:literal) - $rev:ident),+ $(,)?
      }) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
         pub enum $name {
@@ -131,7 +139,7 @@ macro_rules! impl2DDirection {
         impl DirectionOffset<(Offset, Offset)> for $name {
             fn get_offset(&self) -> (Offset, Offset) {
                 match self {
-                    $($name::$dir => (Offset::$x_type($x), Offset::$y_type($y)),)+
+                    $($name::$dir => (Offset($x), Offset($y)),)+
                 }
             }
         }
@@ -158,48 +166,42 @@ macro_rules! impl2DDirection {
 }
 
 // TODO remove "Direction" from name?
-// a representing the directions in a grid, without diagonals
+// represents the directions in a grid, without diagonals
 impl2DDirection!(
     GridDirection[4] {
-        Up(Pos(0), Pos(1)) - Down,
-        Right(Pos(1), Pos(0)) - Left,
-        Down(Pos(0), Neg(1)) - Up,
-        Left(Neg(1), Pos(0)) - Right,
+        Up(0, 1) - Down,
+        Right(1, 0) - Left,
+        Down(0, -1) - Up,
+        Left(-1, 0) - Right,
     }
 );
 
-// a representing the directions in a grid, including diagonals
+// represents the directions in a grid, including diagonals
 impl2DDirection!(
     GridDiagDirection[8] {
-        Up(Pos(0), Pos(1)) - Down,
-        UpRight(Pos(1), Pos(1)) - DownLeft,
-        Right(Pos(1), Pos(0)) - Left,
-        DownRight(Pos(1), Neg(1)) - UpLeft,
-        Down(Pos(0), Neg(1)) - Up,
-        DownLeft(Neg(1), Neg(1)) - UpRight,
-        Left(Neg(1), Pos(0)) - Right,
-        UpLeft(Neg(1), Pos(1)) - DownRight,
+        Up(0, 1) - Down,
+        UpRight(1, 1) - DownLeft,
+        Right(1, 0) - Left,
+        DownRight(1, -1) - UpLeft,
+        Down(0, -1) - Up,
+        DownLeft(-1, -1) - UpRight,
+        Left(-1, 0) - Right,
+        UpLeft(-1, 1) - DownRight,
+    }
+);
+
+// represents the directions in a grid, including diagonals
+impl2DDirection!(
+    HexaDirection[6] {
+        Up(0, 1) - Down,
+        UpRight(1, 1) - DownLeft,
+        DownRight(1, 0) - UpLeft,
+        Down(0, -1) - Up,
+        DownLeft(-1, -1) - UpRight,
+        UpLeft(-1, 0) - DownRight,
     }
 );
 
 mod test {
     use super::*;
-
-    #[test]
-    fn offset_ord_test() {
-        assert_eq!(Offset::Pos(0), Offset::Neg(0));
-        assert_eq!(Offset::Neg(0), Offset::Pos(0));
-        assert_eq!(Offset::Pos(1), Offset::Pos(1));
-        assert_eq!(Offset::Neg(1), Offset::Neg(1));
-        assert_ne!(Offset::Neg(0), Offset::Neg(1));
-        assert_ne!(Offset::Pos(0), Offset::Pos(1));
-        assert_ne!(Offset::Neg(1), Offset::Pos(1));
-        assert_ne!(Offset::Pos(1), Offset::Neg(1));
-
-        assert_eq!(Offset::Pos(0).cmp(&Offset::Neg(0)), Ordering::Equal);
-        assert_eq!(Offset::Pos(0).cmp(&Offset::Pos(1)), Ordering::Less);
-        assert_eq!(Offset::Neg(0).cmp(&Offset::Neg(1)), Ordering::Greater);
-        assert_eq!(Offset::Neg(1).cmp(&Offset::Pos(1)), Ordering::Less);
-        assert_eq!(Offset::Pos(1).cmp(&Offset::Neg(1)), Ordering::Greater);
-    }
 }

@@ -126,10 +126,12 @@ pub trait ContiguousBoard: Board
 where
     Self::Index: PartialOrd,
 {
+    type Offset;
+
     // should return a smallest common bound, i.e. i < b.bound() for a board b and every i with b.contains(i)
     fn bound(&self) -> Self::Index;
 
-    fn wrapped(&self, index: Self::Index) -> Self::Index;
+    fn wrapped(&self, index: Self::Offset) -> Self::Index;
 
     // TODO: get_wrapped etc. helper functions?
 }

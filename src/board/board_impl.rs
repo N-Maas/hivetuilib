@@ -1,4 +1,4 @@
-use super::*;
+use super::{directions::Offset, *};
 
 use std::{
     iter,
@@ -84,12 +84,16 @@ impl<T, S> Board for VecBoard<T, S> {
 }
 
 impl<T, S> ContiguousBoard for VecBoard<T, S> {
+    type Offset = Offset;
+
     fn bound(&self) -> Index1D {
         Index1D::from(self.content.len())
     }
 
-    fn wrapped(&self, index: Index1D) -> Index1D {
-        Index1D::from(index.val % self.content.len())
+    fn wrapped(&self, Offset(index): Offset) -> Index1D {
+        let rem = index.rem_euclid(self.content.len() as isize);
+        assert!(rem >= 0);
+        Index1D::from(rem as usize)
     }
 }
 
@@ -195,6 +199,8 @@ impl<T, S> Board for MatrixBoard<T, S> {
 }
 
 impl<T, S> ContiguousBoard for MatrixBoard<T, S> {
+    type Offset = (Offset, Offset);
+
     fn bound(&self) -> Index2D {
         Index2D {
             x: self.num_cols,
@@ -202,10 +208,13 @@ impl<T, S> ContiguousBoard for MatrixBoard<T, S> {
         }
     }
 
-    fn wrapped(&self, index: Index2D) -> Index2D {
+    fn wrapped(&self, (Offset(x), Offset(y)): (Offset, Offset)) -> Index2D {
+        let rem_x = x.rem_euclid(self.num_cols as isize);
+        let rem_y = y.rem_euclid(self.num_rows as isize);
+        assert!(rem_x >= 0 && rem_y >= 0);
         Index2D {
-            x: index.x % self.num_cols,
-            y: index.y % self.num_rows,
+            x: rem_x as usize,
+            y: rem_y as usize,
         }
     }
 }

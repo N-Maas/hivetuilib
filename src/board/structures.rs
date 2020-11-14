@@ -90,8 +90,7 @@ where
     type Direction = D;
 
     fn next(&self, board: &B, index: B::Index, direction: D) -> Option<B::Index> {
-        index
-            .apply_offset(direction.get_offset())
+        B::Index::from_offset(index.apply_offset(direction.get_offset()))
             .filter(|i| board.contains(*i))
     }
 }
@@ -133,15 +132,12 @@ impl<I: OffsetableIndex + PartialOrd, D: DirectionOffset<I::Offset>> WrappedOffs
 impl<B: ContiguousBoard, D: DirectionOffset<<B::Index as OffsetableIndex>::Offset>>
     DirectionStructure<B> for WrappedOffsetStructure<B::Index, D>
 where
-    B::Index: OffsetableIndex + PartialOrd,
+    B::Index: OffsetableIndex<Offset = B::Offset> + PartialOrd,
 {
     type Direction = D;
 
     fn next(&self, board: &B, index: B::Index, direction: D) -> Option<B::Index> {
-        index
-            .apply_offset(direction.get_offset())
-            .map(|i| board.wrapped(i))
-            .filter(|i| board.contains(*i))
+        Some(board.wrapped(index.apply_offset(direction.get_offset())))
     }
 }
 
@@ -149,7 +145,7 @@ where
 impl<B: ContiguousBoard, D: DirectionOffset<<B::Index as OffsetableIndex>::Offset>>
     AdjacencyStructure<B> for WrappedOffsetStructure<B::Index, D>
 where
-    B::Index: OffsetableIndex + PartialOrd,
+    B::Index: OffsetableIndex<Offset = B::Offset> + PartialOrd,
     D: DirectionEnumerable,
 {
     implAdjacencyStructure!();
@@ -158,7 +154,7 @@ where
 impl<B: ContiguousBoard, D: DirectionOffset<<B::Index as OffsetableIndex>::Offset>>
     NeighborhoodStructure<B> for WrappedOffsetStructure<B::Index, D>
 where
-    B::Index: OffsetableIndex + PartialOrd,
+    B::Index: OffsetableIndex<Offset = B::Offset> + PartialOrd,
     D: DirectionEnumerable,
 {
     implNeighborhoodStructure!();
