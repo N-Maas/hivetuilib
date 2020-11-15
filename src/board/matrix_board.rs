@@ -1,101 +1,12 @@
-use super::{directions::Offset, *};
+use super::{
+    directions::DirectionOffset, directions::Offset, directions::OffsetableIndex,
+    search::BoardToSet, search::HashIndexSet, *,
+};
 
 use std::{
     iter,
-    ops::{Index, IndexMut},
+    ops::{Add, Index, IndexMut},
 };
-
-// TODO: use Box<[T]> instead
-#[derive(Debug, Clone)]
-pub struct VecBoard<T, S = ()> {
-    content: Vec<T>,
-    structure: S,
-}
-
-impl<T: Clone, S> VecBoard<T, S> {
-    pub fn from_value(count: usize, val: T, structure: S) -> Self {
-        Self {
-            content: vec![val; count],
-            structure,
-        }
-    }
-}
-
-impl<T: Default, S> VecBoard<T, S> {
-    pub fn with_default(count: usize, structure: S) -> Self {
-        Self {
-            content: iter::repeat_with(|| Default::default())
-                .take(count)
-                .collect(),
-            structure,
-        }
-    }
-}
-
-// TODO: builder
-
-impl<T, I: Into<Index1D>, S> Index<I> for VecBoard<T, S> {
-    type Output = T;
-
-    fn index(&self, index: I) -> &T {
-        self.content.index(index.into().val)
-    }
-}
-
-impl<T, I: Into<Index1D>, S> IndexMut<I> for VecBoard<T, S> {
-    fn index_mut(&mut self, index: I) -> &mut T {
-        self.content.index_mut(index.into().val)
-    }
-}
-
-impl<T, S> BoardIndexable for VecBoard<T, S> {
-    type Index = Index1D;
-
-    fn all_indices(&self) -> Vec<Index1D> {
-        (0..self.content.len())
-            .map(|val| Index1D::from(val))
-            .collect()
-    }
-}
-
-impl<T, S> Board for VecBoard<T, S> {
-    type Content = T;
-    type Structure = S;
-
-    fn size(&self) -> usize {
-        self.content.len()
-    }
-
-    fn contains(&self, index: Index1D) -> bool {
-        index.val < self.size()
-    }
-
-    fn structure(&self) -> &S {
-        &self.structure
-    }
-
-    fn get(&self, index: Index1D) -> Option<&T> {
-        self.content.get(index.val)
-    }
-
-    fn get_mut(&mut self, index: Index1D) -> Option<&mut T> {
-        self.content.get_mut(index.val)
-    }
-}
-
-impl<T, S> ContiguousBoard for VecBoard<T, S> {
-    type Offset = Offset;
-
-    fn bound(&self) -> Index1D {
-        Index1D::from(self.content.len())
-    }
-
-    fn wrapped(&self, Offset(index): Offset) -> Index1D {
-        let rem = index.rem_euclid(self.content.len() as isize);
-        assert!(rem >= 0);
-        Index1D::from(rem as usize)
-    }
-}
 
 // A two-dimensional immutable board. The fields are saved in a vec internally, calculating the index as necessary.
 #[derive(Debug, Clone)]
@@ -219,18 +130,86 @@ impl<T, S> ContiguousBoard for MatrixBoard<T, S> {
     }
 }
 
+impl<T, S> BoardToSet for MatrixBoard<T, S> {
+    type Set = HashIndexSet<Index2D>;
+
+    fn get_index_set(&self) -> Self::Set {
+        Self::Set::new()
+    }
+}
+
+// ----- the index belonging to a MatrixBoard -----
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Index2D {
+    pub x: usize,
+    pub y: usize,
+}
+
+impl BoardIdxType for Index2D {}
+
+impl From<(usize, usize)> for Index2D {
+    fn from((x, y): (usize, usize)) -> Self {
+        Self { x, y }
+    }
+}
+
+impl<B: Board<Index = Index2D>> From<Field<'_, B>> for Index2D {
+    fn from(f: Field<'_, B>) -> Self {
+        f.index()
+    }
+}
+
+impl PartialOrd for Index2D {
+    fn partial_cmp(&self, other: &Index2D) -> Option<Ordering> {
+        if self.x == other.x && self.y == other.y {
+            Some(Ordering::Equal)
+        } else if self.x <= other.y && self.y <= other.y {
+            Some(Ordering::Less)
+        } else if self.x >= other.y && self.y >= other.y {
+            Some(Ordering::Greater)
+        } else {
+            None
+        }
+    }
+}
+
+impl OffsetableIndex for Index2D {
+    type Offset = (Offset, Offset);
+
+    fn apply_offset(&self, (Offset(dx), Offset(dy)): (Offset, Offset)) -> (Offset, Offset) {
+        (Offset(self.x as isize + dx), Offset(self.y as isize + dy))
+    }
+
+    fn from_offset((Offset(x), Offset(y)): (Offset, Offset)) -> Option<Self> {
+        if x >= 0 && y >= 0 {
+            Some(Self {
+                x: x as usize,
+                y: y as usize,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl<D> Add<D> for Index2D
+where
+    D: DirectionOffset<<Self as OffsetableIndex>::Offset>,
+{
+    type Output = <Self as OffsetableIndex>::Offset;
+
+    fn add(self, rhs: D) -> Self::Output {
+        self.apply_offset(rhs.get_offset())
+    }
+}
+
+#[cfg(test)]
 mod test {
     use super::*;
 
     #[test]
-    fn vec_board_test() {
-        let board = VecBoard::<usize, ()>::with_default(1, ());
-        assert_eq!(board.size(), 1);
-        assert_eq!(board[0], 0);
-    }
-
-    #[test]
-    fn matrix_board_test() {
+    fn basic_test() {
         let board = MatrixBoard::<usize, ()>::with_default(2, 2, ());
         assert_eq!(board.size(), 4);
         assert_eq!(board[(1, 1)], 0);

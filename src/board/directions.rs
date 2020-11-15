@@ -1,5 +1,3 @@
-use std::ops::Add;
-
 use super::*;
 
 // TODO: move type parameter to associated type?
@@ -30,63 +28,6 @@ pub trait OffsetableIndex: BoardIdxType {
     fn apply_offset(&self, offset: Self::Offset) -> Self::Offset;
 
     fn from_offset(index: Self::Offset) -> Option<Self>;
-}
-
-impl OffsetableIndex for Index1D {
-    type Offset = Offset;
-
-    fn apply_offset(&self, Offset(delta): Offset) -> Offset {
-        Offset(self.val as isize + delta)
-    }
-
-    fn from_offset(Offset(index): Offset) -> Option<Self> {
-        if index >= 0 {
-            Some(Self::from(index as usize))
-        } else {
-            None
-        }
-    }
-}
-
-impl<D> Add<D> for Index1D
-where
-    D: DirectionOffset<<Self as OffsetableIndex>::Offset>,
-{
-    type Output = <Self as OffsetableIndex>::Offset;
-
-    fn add(self, rhs: D) -> Self::Output {
-        self.apply_offset(rhs.get_offset())
-    }
-}
-
-impl OffsetableIndex for Index2D {
-    type Offset = (Offset, Offset);
-
-    fn apply_offset(&self, (Offset(dx), Offset(dy)): (Offset, Offset)) -> (Offset, Offset) {
-        (Offset(self.x as isize + dx), Offset(self.y as isize + dy))
-    }
-
-    fn from_offset((Offset(x), Offset(y)): (Offset, Offset)) -> Option<Self> {
-        if x >= 0 && y >= 0 {
-            Some(Self {
-                x: x as usize,
-                y: y as usize,
-            })
-        } else {
-            None
-        }
-    }
-}
-
-impl<D> Add<D> for Index2D
-where
-    D: DirectionOffset<<Self as OffsetableIndex>::Offset>,
-{
-    type Output = <Self as OffsetableIndex>::Offset;
-
-    fn add(self, rhs: D) -> Self::Output {
-        self.apply_offset(rhs.get_offset())
-    }
 }
 
 // ----- direction implementations -----
@@ -214,7 +155,3 @@ impl2DDirection!(
         UpLeft(-1, 0) - DownRight,
     }
 );
-
-mod test {
-    use super::*;
-}

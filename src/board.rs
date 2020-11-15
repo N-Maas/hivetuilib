@@ -1,7 +1,8 @@
-pub mod board_impl;
 pub mod directions;
+pub mod matrix_board;
 pub mod search;
 pub mod structures;
+pub mod vec_board;
 
 use std::{
     cmp::Ordering, collections::HashSet, fmt::Debug, hash::Hash, iter::Copied, marker::PhantomData,
@@ -134,61 +135,6 @@ where
     fn wrapped(&self, index: Self::Offset) -> Self::Index;
 
     // TODO: get_wrapped etc. helper functions?
-}
-
-// ----- index type -----
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Index1D {
-    pub val: usize,
-}
-
-impl BoardIdxType for Index1D {}
-
-impl From<usize> for Index1D {
-    fn from(val: usize) -> Self {
-        Self { val }
-    }
-}
-
-impl<B: Board<Index = Index1D>> From<Field<'_, B>> for Index1D {
-    fn from(f: Field<'_, B>) -> Self {
-        f.index()
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Index2D {
-    pub x: usize,
-    pub y: usize,
-}
-
-impl BoardIdxType for Index2D {}
-
-impl From<(usize, usize)> for Index2D {
-    fn from((x, y): (usize, usize)) -> Self {
-        Self { x, y }
-    }
-}
-
-impl<B: Board<Index = Index2D>> From<Field<'_, B>> for Index2D {
-    fn from(f: Field<'_, B>) -> Self {
-        f.index()
-    }
-}
-
-impl PartialOrd for Index2D {
-    fn partial_cmp(&self, other: &Index2D) -> Option<Ordering> {
-        if self.x == other.x && self.y == other.y {
-            Some(Ordering::Equal)
-        } else if self.x <= other.y && self.y <= other.y {
-            Some(Ordering::Less)
-        } else if self.x >= other.y && self.y >= other.y {
-            Some(Ordering::Greater)
-        } else {
-            None
-        }
-    }
 }
 
 // TOOD rather bad hack to enable iteration - enforce lifetime binding to self?

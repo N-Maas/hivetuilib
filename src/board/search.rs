@@ -69,22 +69,6 @@ pub trait BoardToSet {
     fn get_index_set(&self) -> Self::Set;
 }
 
-impl<T, S> BoardToSet for board_impl::VecBoard<T, S> {
-    type Set = HashIndexSet<Index1D>;
-
-    fn get_index_set(&self) -> Self::Set {
-        Self::Set::new()
-    }
-}
-
-impl<T, S> BoardToSet for board_impl::MatrixBoard<T, S> {
-    type Set = HashIndexSet<Index2D>;
-
-    fn get_index_set(&self) -> Self::Set {
-        Self::Set::new()
-    }
-}
-
 pub trait Searchable<'a> {
     type Set: IndexSet;
     type Board: Board<Index = <Self::Set as IndexSet>::IndexType>;
@@ -274,7 +258,6 @@ impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
         self.base_insert(el.into())
     }
 
-    // TODO: this is a bit ugly, waiting for GATs..
     pub fn iter(&self) -> impl Iterator<Item = Field<'_, B>> {
         self.base_set
             .iter()
@@ -461,14 +444,18 @@ impl<I: BoardIdxType> IntoIterator for FieldSearchResult<I> {
     }
 }
 
+#[cfg(test)]
 mod test {
-    use super::*;
+    use super::{
+        directions::{BinaryDirection, GridDirection},
+        matrix_board::*,
+        structures::WrappedOffsetStructure,
+        vec_board::*,
+        *,
+    };
 
     #[test]
     fn search_repeated_test() {
-        use crate::board::board_impl::MatrixBoard;
-        use crate::board::directions::GridDirection;
-        use crate::board::structures::WrappedOffsetStructure;
         type TestBoard = MatrixBoard<usize, WrappedOffsetStructure<Index2D, GridDirection>>;
 
         let board = TestBoard::with_default(2, 2, WrappedOffsetStructure::new());
@@ -482,9 +469,6 @@ mod test {
 
     #[test]
     fn bidirectional_test() {
-        use crate::board::board_impl::VecBoard;
-        use crate::board::directions::BinaryDirection;
-        use crate::board::structures::WrappedOffsetStructure;
         type TestBoard = VecBoard<Option<()>, WrappedOffsetStructure<Index1D, BinaryDirection>>;
 
         let mut board = TestBoard::with_default(5, WrappedOffsetStructure::new());
