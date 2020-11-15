@@ -11,7 +11,7 @@ use std::{
 // A two-dimensional immutable board. The fields are saved in a vec internally, calculating the index as necessary.
 #[derive(Debug, Clone)]
 pub struct MatrixBoard<T, S = ()> {
-    content: Vec<T>,
+    content: Box<[T]>,
     num_cols: usize,
     num_rows: usize,
     structure: S,
@@ -38,7 +38,7 @@ impl<T, S> MatrixBoard<T, S> {
 impl<T: Clone, S> MatrixBoard<T, S> {
     pub fn from_value(num_cols: usize, num_rows: usize, val: T, structure: S) -> Self {
         Self {
-            content: vec![val; num_cols * num_rows],
+            content: iter::repeat(val).take(num_cols * num_rows).collect(),
             num_cols,
             num_rows,
             structure,

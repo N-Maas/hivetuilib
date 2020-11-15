@@ -11,14 +11,14 @@ use std::{
 // TODO: use Box<[T]> instead
 #[derive(Debug, Clone)]
 pub struct VecBoard<T, S = ()> {
-    content: Vec<T>,
+    content: Box<[T]>,
     structure: S,
 }
 
 impl<T: Clone, S> VecBoard<T, S> {
     pub fn from_value(count: usize, val: T, structure: S) -> Self {
         Self {
-            content: vec![val; count],
+            content: iter::repeat(val).take(count).collect(),
             structure,
         }
     }
