@@ -1,6 +1,6 @@
-use std::iter::FromIterator;
+use std::iter::{self, FromIterator};
 
-use super::*;
+use super::{directions::DirectionReversable, *};
 
 pub trait IndexSet {
     type IndexType: BoardIdxType;
@@ -132,6 +132,122 @@ where
             }
             set
         })
+    }
+}
+
+impl<'a, S, B> Field<'a, B>
+where
+    S: DirectionStructure<B>,
+    B: BoardToSet,
+    B: Board<Structure = S, Index = <<B as BoardToSet>::Set as IndexSet>::IndexType>,
+{
+    /// Note that the first element is self.
+    ///
+    /// It is guaranteed that no field is visited twice.
+    pub fn iter_line(&self, direction: S::Direction) -> impl Iterator<Item = Field<'a, B>> {
+        let mut set = self.board().get_index_set();
+        iter::successors(Some(*self), move |f| f.get_successor(direction, &mut set))
+    }
+
+    /// The iterator will first follow the line of the given direction
+    /// while the predicate return true. Afterwards, it continues with the reverse direction.
+    ///
+    /// Note that the first element is self. In the case that the predicate rejects self, iteration still continues.
+    ///
+    /// It is guaranteed that no field is visited twice.
+    pub fn iter_bidirectional<P>(
+        &self,
+        direction: S::Direction,
+        predicate: P,
+    ) -> Bidirectional<'a, S, B, P>
+    where
+        P: FnMut(Self) -> bool,
+        S::Direction: DirectionReversable,
+    {
+        Bidirectional::new(*self, direction, predicate)
+    }
+
+    fn get_successor(&self, direction: S::Direction, set: &mut B::Set) -> Option<Self> {
+        self.next(direction)
+            .map(|f| if set.insert(f.index()) { Some(f) } else { None })
+            .flatten()
+    }
+}
+
+pub struct Bidirectional<'a, S, B, P>
+where
+    S: DirectionStructure<B>,
+    B: Board<Structure = S> + BoardToSet,
+{
+    root: Option<Field<'a, B>>,
+    previous: Option<Field<'a, B>>,
+    direction: S::Direction,
+    set: B::Set,
+    predicate: P,
+}
+
+impl<'a, S, B, P> Bidirectional<'a, S, B, P>
+where
+    S: DirectionStructure<B>,
+    B: Board<Structure = S> + BoardToSet,
+{
+    pub fn new(root: Field<'a, B>, direction: S::Direction, predicate: P) -> Self {
+        Self {
+            root: Some(root),
+            previous: None,
+            direction,
+            set: root.board().get_index_set(),
+            predicate,
+        }
+    }
+}
+
+impl<'a, S, B, P> Iterator for Bidirectional<'a, S, B, P>
+where
+    S: DirectionStructure<B>,
+    S::Direction: DirectionReversable,
+    B: Board<Structure = S, Index = <<B as BoardToSet>::Set as IndexSet>::IndexType> + BoardToSet,
+    P: FnMut(Field<'a, B>) -> bool,
+{
+    type Item = Field<'a, B>;
+
+    fn next(&mut self) -> Option<Field<'a, B>> {
+        match self.previous {
+            // handle some edge cases for the root element
+            None => {
+                // unwrap is safe due to initialization
+                let root = self.root.unwrap();
+                debug_assert!(self.set.insert(root.index()));
+                self.previous = Some(root);
+                if (self.predicate)(root) {
+                    Some(root)
+                } else {
+                    self.next()
+                }
+            }
+            Some(field) => {
+                let next = field
+                    .get_successor(self.direction, &mut self.set)
+                    .filter(|f| (self.predicate)(*f));
+                match next {
+                    Some(_) => {
+                        self.previous = next;
+                        next
+                    }
+                    None => {
+                        // When the first line is finished: reset to root, switch direction and continue.
+                        self.root
+                            .take()
+                            .map(|root| {
+                                self.previous = Some(root);
+                                self.direction = self.direction.reversed();
+                                self.next()
+                            })
+                            .flatten()
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -362,5 +478,49 @@ mod test {
         for &(x, y) in [(0, 0), (0, 1), (1, 0), (1, 1)].iter() {
             assert!(search.contains(board.get_field(Index2D { x, y }).unwrap()));
         }
+    }
+
+    #[test]
+    fn bidirectional_test() {
+        use crate::board::board_impl::VecBoard;
+        use crate::board::directions::BinaryDirection;
+        use crate::board::structures::WrappedOffsetStructure;
+        type TestBoard = VecBoard<Option<()>, WrappedOffsetStructure<Index1D, BinaryDirection>>;
+
+        let mut board = TestBoard::with_default(5, WrappedOffsetStructure::new());
+        let center = board.get_field_unchecked(2.into());
+        iter_eq(
+            center.iter_bidirectional(BinaryDirection::Forward, |_| true),
+            &[2, 3, 4, 0, 1],
+        );
+
+        board[4] = Some(());
+        let center = board.get_field_unchecked(2.into());
+        iter_eq(
+            center.iter_bidirectional(BinaryDirection::Forward, |f| f.is_empty()),
+            &[2, 3, 1, 0],
+        );
+
+        // if the root does not match the predicate, iteration still continues
+        board[2] = Some(());
+        let center = board.get_field_unchecked(2.into());
+        iter_eq(
+            center.iter_bidirectional(BinaryDirection::Forward, |f| f.is_empty()),
+            &[3, 1, 0],
+        );
+
+        board[3] = Some(());
+        let center = board.get_field_unchecked(2.into());
+        iter_eq(
+            center.iter_bidirectional(BinaryDirection::Forward, |f| f.is_empty()),
+            &[1, 0],
+        );
+    }
+
+    fn iter_eq<T: Into<Index1D>>(left: impl Iterator<Item = T>, right: &[usize]) {
+        let checked = left
+            .zip(right.iter())
+            .map(|(l, &r)| assert_eq!(l.into(), r.into()));
+        assert_eq!(checked.count(), right.len());
     }
 }
