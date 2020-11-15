@@ -1,5 +1,6 @@
 pub mod directions;
 pub mod matrix_board;
+pub mod open_board;
 pub mod search;
 pub mod structures;
 pub mod vec_board;
