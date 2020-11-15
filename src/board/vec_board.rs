@@ -69,10 +69,6 @@ impl<T, S> Board for VecBoard<T, S> {
         self.content.len()
     }
 
-    fn contains(&self, index: Index1D) -> bool {
-        index.val < self.size()
-    }
-
     fn structure(&self) -> &S {
         &self.structure
     }

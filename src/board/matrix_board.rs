@@ -90,10 +90,6 @@ impl<T, S> Board for MatrixBoard<T, S> {
         self.num_cols * self.num_rows
     }
 
-    fn contains(&self, index: Index2D) -> bool {
-        self.calculate_index(index).is_some()
-    }
-
     fn structure(&self) -> &S {
         &self.structure
     }

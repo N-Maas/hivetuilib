@@ -152,9 +152,12 @@ where
     }
 
     fn get_successor(&self, direction: S::Direction, set: &mut B::Set) -> Option<Self> {
-        self.next(direction)
-            .map(|f| if set.insert(f.index()) { Some(f) } else { None })
-            .flatten()
+        let field = self.next(direction)?;
+        if set.insert(field.index()) {
+            Some(field)
+        } else {
+            None
+        }
     }
 }
 
@@ -220,14 +223,10 @@ where
                     }
                     None => {
                         // When the first line is finished: reset to root, switch direction and continue.
-                        self.root
-                            .take()
-                            .map(|root| {
-                                self.previous = Some(root);
-                                self.direction = self.direction.reversed();
-                                self.next()
-                            })
-                            .flatten()
+                        let root = self.root.take()?;
+                        self.previous = Some(root);
+                        self.direction = self.direction.reversed();
+                        self.next()
                     }
                 }
             }

@@ -19,7 +19,9 @@ pub trait Board: BoardIndexable {
 
     fn size(&self) -> usize;
 
-    fn contains(&self, index: Self::Index) -> bool;
+    fn contains(&self, index: Self::Index) -> bool {
+        self.get(index).is_some()
+    }
 
     fn structure(&self) -> &Self::Structure;
 
