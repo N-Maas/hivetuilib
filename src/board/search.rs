@@ -11,6 +11,7 @@ pub trait IndexSet {
 
     fn contains(&self, i: Self::IndexType) -> bool;
 
+    /// Returns true if the index was not contained in the set before.
     fn insert(&mut self, i: Self::IndexType) -> bool;
 
     fn iter(&self) -> Self::Iter;
@@ -112,7 +113,7 @@ where
 
     fn search(self) -> SearchingSet<'a, Self::Set, Self::Board> {
         let mut set = self.board().search();
-        set.insert(self);
+        set.insert(self.index());
         set
     }
 }
@@ -127,7 +128,7 @@ where
         first.map(|f| {
             let mut set = f.search();
             for field in iter {
-                set.insert(field);
+                set.insert(field.index());
             }
             set
         })
@@ -149,12 +150,12 @@ impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
         self.base_set.size()
     }
 
-    pub fn contains(&self, f: Field<'_, B>) -> bool {
-        self.base_set.contains(f.index())
+    pub fn contains<T: Into<B::Index>>(&self, el: T) -> bool {
+        self.base_set.contains(el.into())
     }
 
-    pub fn insert(&mut self, f: Field<'_, B>) -> bool {
-        self.base_insert(f.index())
+    pub fn insert<T: Into<B::Index>>(&mut self, el: T) -> bool {
+        self.base_insert(el.into())
     }
 
     // TODO: this is a bit ugly, waiting for GATs..
@@ -223,7 +224,7 @@ impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
 
     pub fn grow<F>(&mut self, predicate: F) -> bool
     where
-        F: Fn(&Field<B>) -> bool,
+        F: Fn(Field<B>) -> bool,
         B::Structure: NeighborhoodStructure<B>,
     {
         self.extend_helper(self.apply_growth(predicate))
@@ -231,12 +232,12 @@ impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
 
     pub fn grow_repeated<F>(&mut self, predicate: F) -> bool
     where
-        F: Fn(&Field<B>) -> bool,
+        F: Fn(Field<B>) -> bool,
         B::Structure: NeighborhoodStructure<B>,
     {
         self.extend_repeated(|f| {
             f.neighbors()
-                .filter(&predicate)
+                .filter(|f| predicate(*f))
                 .map(|f| f.index())
                 .collect()
         })
@@ -259,7 +260,7 @@ impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
 
     pub fn step<F>(&mut self, predicate: F)
     where
-        F: Fn(&Field<B>) -> bool,
+        F: Fn(Field<B>) -> bool,
         B::Structure: NeighborhoodStructure<B>,
     {
         self.replace_helper(self.apply_growth(predicate))
@@ -285,11 +286,11 @@ impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
 
     fn apply_growth<F>(&self, predicate: F) -> FieldSearchResult<B::Index>
     where
-        F: Fn(&Field<B>) -> bool,
+        F: Fn(Field<B>) -> bool,
         B::Structure: NeighborhoodStructure<B>,
     {
         self.iter()
-            .flat_map(|f| f.neighbors().filter(&predicate))
+            .flat_map(|f| f.neighbors().filter(|f| predicate(*f)))
             .map(|f| f.index())
             .collect()
     }
@@ -352,12 +353,9 @@ mod test {
         use crate::board::board_impl::MatrixBoard;
         use crate::board::directions::GridDirection;
         use crate::board::structures::WrappedOffsetStructure;
-        let board =
-            MatrixBoard::<usize, WrappedOffsetStructure<Index2D, GridDirection>>::with_default(
-                2,
-                2,
-                WrappedOffsetStructure::new(),
-            );
+        type TestBoard = MatrixBoard<usize, WrappedOffsetStructure<Index2D, GridDirection>>;
+
+        let board = TestBoard::with_default(2, 2, WrappedOffsetStructure::new());
         let mut search = board.iter_fields().nth(0).unwrap().search();
         assert!(search.grow_repeated(|_| true));
         assert_eq!(search.size(), 4);

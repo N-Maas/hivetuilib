@@ -23,7 +23,7 @@ pub trait Board: BoardIndexable {
     fn structure(&self) -> &Self::Structure;
 
     // TODO better get_field_unchecked or similar?
-    fn field_at<'a>(&'a self, index: Self::Index) -> Field<'a, Self>
+    fn get_field_unchecked<'a>(&'a self, index: Self::Index) -> Field<'a, Self>
     where
         Self: Sized,
     {
@@ -203,7 +203,7 @@ pub trait BoardIndexable {
 
 // ----- field implementation -----
 
-#[derive(Debug, Eq)]
+#[derive(Eq)]
 pub struct Field<'a, B: Board> {
     board: &'a B,
     index: B::Index,
@@ -252,6 +252,12 @@ impl<'a, B: Board> Clone for Field<'a, B> {
 }
 
 impl<'a, B: Board> Copy for Field<'a, B> {}
+
+impl<B: Board> Debug for Field<'_, B> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("Field {{ index: {:?} }}", self.index))
+    }
+}
 
 impl<'a, T, B: Board<Content = Option<T>>> Field<'a, B> {
     pub fn is_empty(&self) -> bool {

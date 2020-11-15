@@ -128,9 +128,12 @@ impl DirectionEnumerable for BinaryDirection {
 
 // implement directions used for a two dimensions
 macro_rules! impl2DDirection {
-    ($name:ident[$num:literal] {
-        $($dir:ident($x:literal, $y:literal) - $rev:ident),+ $(,)?
-     }) => {
+    (   $(#[$meta:meta])*
+        $name:ident[$num:literal] {
+            $($dir:ident($x:literal, $y:literal) - $rev:ident),+ $(,)?
+        }
+    ) => {
+        $(#[$meta])*
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
         pub enum $name {
             $($dir,)+
@@ -165,9 +168,8 @@ macro_rules! impl2DDirection {
     };
 }
 
-// TODO remove "Direction" from name?
-// represents the directions in a grid, without diagonals
 impl2DDirection!(
+    /// Represents the directions in a grid, without diagonals.
     GridDirection[4] {
         Up(0, 1) - Down,
         Right(1, 0) - Left,
@@ -176,8 +178,8 @@ impl2DDirection!(
     }
 );
 
-// represents the directions in a grid, including diagonals
 impl2DDirection!(
+    /// Represents the directions in a grid, including diagonals.
     GridDiagDirection[8] {
         Up(0, 1) - Down,
         UpRight(1, 1) - DownLeft,
@@ -190,8 +192,19 @@ impl2DDirection!(
     }
 );
 
-// represents the directions in a grid, including diagonals
 impl2DDirection!(
+    /// Represents directions for a hexagonal board.
+    /// <pre>
+    ///  ___
+    /// /0/2\___
+    /// \___/1/2\___
+    /// /0/1\___/2/2\
+    /// \___/1/1\___/
+    /// /0/0\___/2/1\
+    /// \___/1/0\___/
+    ///     \___/2/0\
+    ///         \___/
+    /// </pre>
     HexaDirection[6] {
         Up(0, 1) - Down,
         UpRight(1, 1) - DownLeft,
