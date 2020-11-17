@@ -1,20 +1,28 @@
-use std::iter::{self, FromIterator};
+use std::{
+    collections::HashMap,
+    iter::{self, FromIterator},
+};
 
 use super::{directions::DirectionReversable, *};
 
-pub trait IndexSet {
+pub trait IndexMap {
     type IndexType: BoardIdxType;
+    type Item;
     type Iter: ExactSizeIterator<Item = Self::IndexType>;
 
     // fn from_board<B: Board<Self::IndexType>>(board: &'a B) -> Self;
     fn size(&self) -> usize;
 
-    fn contains(&self, i: Self::IndexType) -> bool;
+    fn contains(&self, i: Self::IndexType) -> bool {
+        self.get(i).is_some()
+    }
 
-    /// Returns true if the index was not contained in the set before.
-    fn insert(&mut self, i: Self::IndexType) -> bool;
+    fn get(&self, i: Self::IndexType) -> Option<&Self::Item>;
 
-    fn iter(&self) -> Self::Iter;
+    /// Returns the old value if the key was already present.
+    fn insert(&mut self, i: Self::IndexType, el: Self::Item) -> Option<Self::Item>;
+
+    fn iter_indices(&self) -> Self::Iter;
 
     fn clear(&mut self);
 
@@ -24,19 +32,19 @@ pub trait IndexSet {
 // TODO: efficient set for boards with normal indizes
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct HashIndexSet<I: BoardIdxType + Hash> {
-    set: HashSet<I>,
+pub struct HashIndexMap<I: BoardIdxType + Hash, T> {
+    map: HashMap<I, T>,
 }
 
-impl<I: BoardIdxType + Hash> HashIndexSet<I> {
+impl<I: BoardIdxType + Hash, T> HashIndexMap<I, T> {
     pub fn new() -> Self {
         Self {
-            set: HashSet::new(),
+            map: HashMap::new(),
         }
     }
 }
 
-impl<'a, B: Board> From<&'a B> for HashIndexSet<B::Index>
+impl<'a, B: Board, T> From<&'a B> for HashIndexMap<B::Index, T>
 where
     B::Index: Hash,
 {
@@ -45,75 +53,113 @@ where
     }
 }
 
-impl<I: BoardIdxType + Hash> IndexSet for HashIndexSet<I> {
+impl<I: BoardIdxType + Hash, T> IndexMap for HashIndexMap<I, T> {
     type IndexType = I;
-
+    type Item = T;
     type Iter = IntoIter<I>;
 
     fn size(&self) -> usize {
-        self.set.len()
+        self.map.len()
     }
 
     fn contains(&self, i: Self::IndexType) -> bool {
-        self.set.contains(&i)
+        self.map.contains_key(&i)
     }
 
-    fn insert(&mut self, i: Self::IndexType) -> bool {
-        self.set.insert(i)
+    fn get(&self, i: Self::IndexType) -> Option<&T> {
+        self.map.get(&i)
+    }
+
+    fn insert(&mut self, i: Self::IndexType, el: T) -> Option<T> {
+        self.map.insert(i, el)
     }
 
     // TODO: this is a bit ugly, waiting for GATs..
-    fn iter(&self) -> Self::Iter {
-        self.set.iter().copied().collect::<Vec<_>>().into_iter()
+    fn iter_indices(&self) -> Self::Iter {
+        self.map.keys().copied().collect::<Vec<_>>().into_iter()
     }
 
     fn clear(&mut self) {
-        self.set.clear()
+        self.map.clear()
     }
 }
 
-pub trait BoardToSet {
-    type Set: IndexSet;
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct SetWrapper<M: IndexMap<Item = ()>> {
+    map: M,
+}
 
-    fn get_index_set(&self) -> Self::Set;
+impl<M: IndexMap<Item = ()>> SetWrapper<M> {
+    pub fn size(&self) -> usize {
+        self.map.size()
+    }
+
+    pub fn contains(&self, i: M::IndexType) -> bool {
+        self.map.contains(i)
+    }
+
+    pub fn insert(&mut self, i: M::IndexType) -> bool {
+        self.map.insert(i, ()).is_none()
+    }
+
+    // TODO: this is a bit ugly, waiting for GATs..
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = M::IndexType> {
+        self.map.iter_indices()
+    }
+
+    pub fn clear(&mut self) {
+        self.map.clear()
+    }
+}
+
+impl<M: IndexMap<Item = ()>> From<M> for SetWrapper<M> {
+    fn from(map: M) -> Self {
+        Self { map }
+    }
+}
+
+pub trait BoardToMap<T> {
+    type Map: IndexMap<Item = T>;
+
+    fn get_index_map(&self) -> Self::Map;
 }
 
 pub trait Searchable<'a> {
-    type Set: IndexSet;
-    type Board: Board<Index = <Self::Set as IndexSet>::IndexType>;
+    type Map: IndexMap<Item = ()>;
+    type Board: Board<Index = <Self::Map as IndexMap>::IndexType>;
 
-    fn search(self) -> SearchingSet<'a, Self::Set, Self::Board>;
+    fn search(self) -> SearchingSet<'a, Self::Map, Self::Board>;
 }
 
-impl<'a, B: BoardToSet> Searchable<'a> for &'a B
+impl<'a, B: BoardToMap<()>> Searchable<'a> for &'a B
 where
-    B: Board<Index = <<B as BoardToSet>::Set as IndexSet>::IndexType>,
+    B: Board<Index = <<B as BoardToMap<()>>::Map as IndexMap>::IndexType>,
 {
-    type Set = <B as BoardToSet>::Set;
+    type Map = <B as BoardToMap<()>>::Map;
     type Board = B;
 
-    fn search(self) -> SearchingSet<'a, Self::Set, Self::Board> {
-        SearchingSet::with_set(self.get_index_set(), self)
+    fn search(self) -> SearchingSet<'a, Self::Map, Self::Board> {
+        SearchingSet::with_map(self.get_index_map(), self)
     }
 }
 
-impl<'a, B: BoardToSet> Searchable<'a> for Field<'a, B>
+impl<'a, B: BoardToMap<()>> Searchable<'a> for Field<'a, B>
 where
-    B: Board<Index = <<B as BoardToSet>::Set as IndexSet>::IndexType>,
+    B: Board<Index = <<B as BoardToMap<()>>::Map as IndexMap>::IndexType>,
 {
-    type Set = <B as BoardToSet>::Set;
+    type Map = <B as BoardToMap<()>>::Map;
     type Board = B;
 
-    fn search(self) -> SearchingSet<'a, Self::Set, Self::Board> {
+    fn search(self) -> SearchingSet<'a, Self::Map, Self::Board> {
         let mut set = self.board().search();
         set.insert(self.index());
         set
     }
 }
 
-impl<'a, B: BoardToSet + 'a> FromIterator<Field<'a, B>> for Option<SearchingSet<'a, B::Set, B>>
+impl<'a, B: BoardToMap<()> + 'a> FromIterator<Field<'a, B>> for Option<SearchingSet<'a, B::Map, B>>
 where
-    B: Board<Index = <<B as BoardToSet>::Set as IndexSet>::IndexType>,
+    B: Board<Index = <<B as BoardToMap<()>>::Map as IndexMap>::IndexType>,
 {
     fn from_iter<T: IntoIterator<Item = Field<'a, B>>>(iter: T) -> Self {
         let mut iter = iter.into_iter();
@@ -128,17 +174,17 @@ where
     }
 }
 
-impl<'a, S, B> Field<'a, B>
+impl<'a, M, B> Field<'a, B>
 where
-    S: DirectionStructure<B>,
-    B: BoardToSet,
-    B: Board<Structure = S, Index = <<B as BoardToSet>::Set as IndexSet>::IndexType>,
+    M: DirectionStructure<B>,
+    B: BoardToMap<()>,
+    B: Board<Structure = M, Index = <<B as BoardToMap<()>>::Map as IndexMap>::IndexType>,
 {
     /// Note that the first element is self.
     ///
     /// It is guaranteed that no field is visited twice.
-    pub fn iter_line(&self, direction: S::Direction) -> impl Iterator<Item = Field<'a, B>> {
-        let mut set = self.board().get_index_set();
+    pub fn iter_line(&self, direction: M::Direction) -> impl Iterator<Item = Field<'a, B>> {
+        let mut set = self.board().get_index_map().into();
         iter::successors(Some(*self), move |f| f.get_successor(direction, &mut set))
     }
 
@@ -150,17 +196,17 @@ where
     /// It is guaranteed that no field is visited twice.
     pub fn iter_bidirectional<P>(
         &self,
-        direction: S::Direction,
+        direction: M::Direction,
         predicate: P,
-    ) -> Bidirectional<'a, S, B, P>
+    ) -> Bidirectional<'a, M, B, P>
     where
         P: FnMut(Self) -> bool,
-        S::Direction: DirectionReversable,
+        M::Direction: DirectionReversable,
     {
         Bidirectional::new(*self, direction, predicate)
     }
 
-    fn get_successor(&self, direction: S::Direction, set: &mut B::Set) -> Option<Self> {
+    fn get_successor(&self, direction: M::Direction, set: &mut SetWrapper<B::Map>) -> Option<Self> {
         let field = self.next(direction)?;
         if set.insert(field.index()) {
             Some(field)
@@ -170,39 +216,40 @@ where
     }
 }
 
-pub struct Bidirectional<'a, S, B, P>
+pub struct Bidirectional<'a, M, B, P>
 where
-    S: DirectionStructure<B>,
-    B: Board<Structure = S> + BoardToSet,
+    M: DirectionStructure<B>,
+    B: Board<Structure = M> + BoardToMap<()>,
 {
     root: Option<Field<'a, B>>,
     previous: Option<Field<'a, B>>,
-    direction: S::Direction,
-    set: B::Set,
+    direction: M::Direction,
+    set: SetWrapper<B::Map>,
     predicate: P,
 }
 
-impl<'a, S, B, P> Bidirectional<'a, S, B, P>
+impl<'a, M, B, P> Bidirectional<'a, M, B, P>
 where
-    S: DirectionStructure<B>,
-    B: Board<Structure = S> + BoardToSet,
+    M: DirectionStructure<B>,
+    B: Board<Structure = M> + BoardToMap<()>,
 {
-    pub fn new(root: Field<'a, B>, direction: S::Direction, predicate: P) -> Self {
+    pub fn new(root: Field<'a, B>, direction: M::Direction, predicate: P) -> Self {
         Self {
             root: Some(root),
             previous: None,
             direction,
-            set: root.board().get_index_set(),
+            set: root.board().get_index_map().into(),
             predicate,
         }
     }
 }
 
-impl<'a, S, B, P> Iterator for Bidirectional<'a, S, B, P>
+impl<'a, M, B, P> Iterator for Bidirectional<'a, M, B, P>
 where
-    S: DirectionStructure<B>,
-    S::Direction: DirectionReversable,
-    B: Board<Structure = S, Index = <<B as BoardToSet>::Set as IndexSet>::IndexType> + BoardToSet,
+    M: DirectionStructure<B>,
+    M::Direction: DirectionReversable,
+    B: Board<Structure = M, Index = <<B as BoardToMap<()>>::Map as IndexMap>::IndexType>
+        + BoardToMap<()>,
     P: FnMut(Field<'a, B>) -> bool,
 {
     type Item = Field<'a, B>;
@@ -244,24 +291,27 @@ where
 }
 
 #[derive(Debug)]
-pub struct SearchingSet<'a, S: IndexSet, B: Board<Index = S::IndexType>> {
-    base_set: S,
+pub struct SearchingSet<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
+    base_set: SetWrapper<M>,
     board: &'a B,
 }
 
-impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
+impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a, M, B> {
     pub fn new(board: &'a B) -> Self
     where
-        S: From<&'a B>,
+        M: From<&'a B>,
     {
         Self {
-            base_set: S::from(board),
+            base_set: M::from(board).into(),
             board,
         }
     }
 
-    pub fn with_set(base_set: S, board: &'a B) -> Self {
-        Self { base_set, board }
+    pub fn with_map(map: M, board: &'a B) -> Self {
+        Self {
+            base_set: map.into(),
+            board,
+        }
     }
 
     pub fn size(&self) -> usize {

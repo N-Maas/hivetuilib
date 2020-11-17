@@ -1,6 +1,6 @@
 use super::{
     directions::DirectionOffset, directions::Offset, directions::OffsetableIndex,
-    search::BoardToSet, search::HashIndexSet, *,
+    search::BoardToMap, search::HashIndexMap, *,
 };
 
 use std::{
@@ -161,11 +161,11 @@ impl<T, S> Board for OpenBoard<T, S> {
 
 // TODO: Contiguous board?
 
-impl<T, S> BoardToSet for OpenBoard<T, S> {
-    type Set = HashIndexSet<OpenIndex>;
+impl<T, S, E> BoardToMap<E> for OpenBoard<T, S> {
+    type Map = HashIndexMap<OpenIndex, E>;
 
-    fn get_index_set(&self) -> Self::Set {
-        Self::Set::new()
+    fn get_index_map(&self) -> Self::Map {
+        Self::Map::new()
     }
 }
 

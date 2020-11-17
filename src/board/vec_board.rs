@@ -1,6 +1,6 @@
 use super::{
     directions::DirectionOffset, directions::Offset, directions::OffsetableIndex,
-    search::BoardToSet, search::HashIndexSet, *,
+    search::BoardToMap, search::HashIndexMap, *,
 };
 
 use std::{
@@ -97,11 +97,11 @@ impl<T, S> ContiguousBoard for VecBoard<T, S> {
 }
 
 // TODO: more efficient set
-impl<T, S> BoardToSet for VecBoard<T, S> {
-    type Set = HashIndexSet<Index1D>;
+impl<T, S, E> BoardToMap<E> for VecBoard<T, S> {
+    type Map = HashIndexMap<Index1D, E>;
 
-    fn get_index_set(&self) -> Self::Set {
-        Self::Set::new()
+    fn get_index_map(&self) -> Self::Map {
+        Self::Map::new()
     }
 }
 
