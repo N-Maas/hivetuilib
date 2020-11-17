@@ -36,6 +36,15 @@ impl<I: BoardIdxType + Hash> HashIndexSet<I> {
     }
 }
 
+impl<'a, B: Board> From<&'a B> for HashIndexSet<B::Index>
+where
+    B::Index: Hash,
+{
+    fn from(_: &'a B) -> Self {
+        Self::new()
+    }
+}
+
 impl<I: BoardIdxType + Hash> IndexSet for HashIndexSet<I> {
     type IndexType = I;
 
@@ -84,7 +93,7 @@ where
     type Board = B;
 
     fn search(self) -> SearchingSet<'a, Self::Set, Self::Board> {
-        SearchingSet::new(self.get_index_set(), self)
+        SearchingSet::with_set(self.get_index_set(), self)
     }
 }
 
@@ -241,7 +250,17 @@ pub struct SearchingSet<'a, S: IndexSet, B: Board<Index = S::IndexType>> {
 }
 
 impl<'a, S: IndexSet, B: Board<Index = S::IndexType>> SearchingSet<'a, S, B> {
-    pub fn new(base_set: S, board: &'a B) -> Self {
+    pub fn new(board: &'a B) -> Self
+    where
+        S: From<&'a B>,
+    {
+        Self {
+            base_set: S::from(board),
+            board,
+        }
+    }
+
+    pub fn with_set(base_set: S, board: &'a B) -> Self {
         Self { base_set, board }
     }
 
