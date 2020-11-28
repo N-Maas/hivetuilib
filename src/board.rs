@@ -1,8 +1,9 @@
 pub mod directions;
-pub mod matrix_board;
-pub mod open_board;
 pub mod search;
 pub mod structures;
+
+pub mod matrix_board;
+pub mod open_board;
 pub mod vec_board;
 
 use std::{
@@ -44,8 +45,6 @@ pub trait Board: BoardIndexable {
 
     fn get(&self, index: Self::Index) -> Option<&Self::Content>;
 
-    fn get_mut(&mut self, index: Self::Index) -> Option<&mut Self::Content>;
-
     fn iter_fields<'a>(
         &'a self,
     ) -> <&'a Self as BoardIntoFieldIter<Self::Index, Self::Content>>::IntoIter
@@ -65,6 +64,12 @@ pub trait Board: BoardIndexable {
     {
         self.into_iter()
     }
+}
+
+pub trait BoardMut: Board {
+    // TODO: convenience methods? FieldMut API?
+
+    fn get_mut(&mut self, index: Self::Index) -> Option<&mut Self::Content>;
 }
 
 // TODO impl Index possible?
@@ -204,6 +209,7 @@ impl<'a, B: Board> Copy for Field<'a, B> {}
 
 impl<B: Board> Debug for Field<'_, B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // TODO: make it pretty
         f.write_fmt(format_args!("Field {{ index: {:?} }}", self.index))
     }
 }
@@ -218,14 +224,10 @@ impl<'a, S, B: Board<Structure = S>> Field<'a, B>
 where
     S: AdjacencyStructure<B>,
 {
-    pub fn is_adjacent_to(&self, index: B::Index) -> bool {
+    pub fn is_adjacent<T: Into<B::Index>>(&self, index: T) -> bool {
         self.board
             .structure()
-            .is_adjacent(self.board, self.index, index)
-    }
-
-    pub fn is_adjacent(&self, other: &Self) -> bool {
-        self.is_adjacent_to(other.index)
+            .is_adjacent(self.board, self.index, index.into())
     }
 }
 
@@ -283,4 +285,36 @@ pub trait DirectionStructure<B: Board> {
     }
 
     fn next(&self, board: &B, index: B::Index, direction: Self::Direction) -> Option<B::Index>;
+}
+
+// ----- index map -----
+
+pub trait IndexMap {
+    type IndexType: BoardIdxType;
+    type Item;
+    type Iter: ExactSizeIterator<Item = Self::IndexType>;
+
+    // fn from_board<B: Board<Self::IndexType>>(board: &'a B) -> Self;
+    fn size(&self) -> usize;
+
+    fn contains(&self, i: Self::IndexType) -> bool {
+        self.get(i).is_some()
+    }
+
+    fn get(&self, i: Self::IndexType) -> Option<&Self::Item>;
+
+    /// Returns the old value if the key was already present.
+    fn insert(&mut self, i: Self::IndexType, el: Self::Item) -> Option<Self::Item>;
+
+    fn iter_indices(&self) -> Self::Iter;
+
+    fn clear(&mut self);
+
+    // TODO: subset and further helper methods?
+}
+
+pub trait BoardToMap<T>: Board {
+    type Map: IndexMap<Item = T, IndexType = Self::Index>;
+
+    fn get_index_map(&self) -> Self::Map;
 }

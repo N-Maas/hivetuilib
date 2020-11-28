@@ -1,6 +1,6 @@
 use super::{
     directions::DirectionOffset, directions::Offset, directions::OffsetableIndex,
-    search::BoardToMap, search::HashIndexMap, *,
+    search::HashIndexMap, BoardToMap, *,
 };
 
 use std::{
@@ -8,7 +8,7 @@ use std::{
     ops::{Add, Index, IndexMut},
 };
 
-// A two-dimensional immutable board. The fields are saved in a vec internally, calculating the index as necessary.
+/// A two-dimensional immutable board. The fields are saved in a vec internally, calculating the index as necessary.
 #[derive(Debug, Clone)]
 pub struct MatrixBoard<T, S = ()> {
     content: Box<[T]>,
@@ -98,7 +98,9 @@ impl<T, S> Board for MatrixBoard<T, S> {
         let idx = self.calculate_index(index)?;
         self.content.get(idx)
     }
+}
 
+impl<T, S> BoardMut for MatrixBoard<T, S> {
     fn get_mut(&mut self, index: Index2D) -> Option<&mut T> {
         let idx = self.calculate_index(index)?;
         self.content.get_mut(idx)

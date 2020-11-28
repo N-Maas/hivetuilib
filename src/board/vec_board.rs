@@ -1,6 +1,6 @@
 use super::{
     directions::DirectionOffset, directions::Offset, directions::OffsetableIndex,
-    search::BoardToMap, search::HashIndexMap, *,
+    search::HashIndexMap, BoardToMap, *,
 };
 
 use std::{
@@ -8,7 +8,7 @@ use std::{
     ops::{Add, Index, IndexMut},
 };
 
-// TODO: use Box<[T]> instead
+/// A one-dimensional immutable board.
 #[derive(Debug, Clone)]
 pub struct VecBoard<T, S = ()> {
     content: Box<[T]>,
@@ -76,7 +76,9 @@ impl<T, S> Board for VecBoard<T, S> {
     fn get(&self, index: Index1D) -> Option<&T> {
         self.content.get(index.val)
     }
+}
 
+impl<T, S> BoardMut for VecBoard<T, S> {
     fn get_mut(&mut self, index: Index1D) -> Option<&mut T> {
         self.content.get_mut(index.val)
     }

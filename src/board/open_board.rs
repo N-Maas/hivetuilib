@@ -1,6 +1,6 @@
 use super::{
     directions::DirectionOffset, directions::Offset, directions::OffsetableIndex,
-    search::BoardToMap, search::HashIndexMap, *,
+    search::HashIndexMap, BoardToMap, *,
 };
 
 use std::{
@@ -8,7 +8,8 @@ use std::{
     ops::{Add, Index, IndexMut},
 };
 
-// A two-dimensional board which can grow as needed. Supports inserting and removing single fields.
+// TODO:
+/// A two-dimensional board which can grow as needed. Supports inserting and removing single fields.
 #[derive(Debug, Clone)]
 pub struct OpenBoard<T, S = ()> {
     columns: VecDeque<VecDeque<Option<T>>>,
@@ -151,7 +152,9 @@ impl<T, S> Board for OpenBoard<T, S> {
         let column = self.columns.get(x)?;
         column.get(y)?.into()
     }
+}
 
+impl<T, S> BoardMut for OpenBoard<T, S> {
     fn get_mut(&mut self, index: OpenIndex) -> Option<&mut T> {
         let (x, y) = self.calculate_index(index)?;
         let column = self.columns.get_mut(x)?;

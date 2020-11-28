@@ -5,30 +5,6 @@ use std::{
 
 use super::{directions::DirectionReversable, *};
 
-pub trait IndexMap {
-    type IndexType: BoardIdxType;
-    type Item;
-    type Iter: ExactSizeIterator<Item = Self::IndexType>;
-
-    // fn from_board<B: Board<Self::IndexType>>(board: &'a B) -> Self;
-    fn size(&self) -> usize;
-
-    fn contains(&self, i: Self::IndexType) -> bool {
-        self.get(i).is_some()
-    }
-
-    fn get(&self, i: Self::IndexType) -> Option<&Self::Item>;
-
-    /// Returns the old value if the key was already present.
-    fn insert(&mut self, i: Self::IndexType, el: Self::Item) -> Option<Self::Item>;
-
-    fn iter_indices(&self) -> Self::Iter;
-
-    fn clear(&mut self);
-
-    // TODO: subset and further helper methods?
-}
-
 // TODO: efficient set for boards with normal indizes
 
 #[derive(Debug, PartialEq, Eq)]
@@ -118,12 +94,6 @@ impl<M: IndexMap<Item = ()>> From<M> for SetWrapper<M> {
     }
 }
 
-pub trait BoardToMap<T> {
-    type Map: IndexMap<Item = T>;
-
-    fn get_index_map(&self) -> Self::Map;
-}
-
 pub trait Searchable<'a> {
     type Map: IndexMap<Item = ()>;
     type Board: Board<Index = <Self::Map as IndexMap>::IndexType>;
@@ -132,8 +102,6 @@ pub trait Searchable<'a> {
 }
 
 impl<'a, B: BoardToMap<()>> Searchable<'a> for &'a B
-where
-    B: Board<Index = <<B as BoardToMap<()>>::Map as IndexMap>::IndexType>,
 {
     type Map = <B as BoardToMap<()>>::Map;
     type Board = B;
@@ -144,8 +112,6 @@ where
 }
 
 impl<'a, B: BoardToMap<()>> Searchable<'a> for Field<'a, B>
-where
-    B: Board<Index = <<B as BoardToMap<()>>::Map as IndexMap>::IndexType>,
 {
     type Map = <B as BoardToMap<()>>::Map;
     type Board = B;
@@ -157,9 +123,8 @@ where
     }
 }
 
-impl<'a, B: BoardToMap<()> + 'a> FromIterator<Field<'a, B>> for Option<SearchingSet<'a, B::Map, B>>
-where
-    B: Board<Index = <<B as BoardToMap<()>>::Map as IndexMap>::IndexType>,
+impl<'a, B: BoardToMap<()> + 'a> FromIterator<Field<'a, B>>
+    for Option<SearchingSet<'a, B::Map, B>>
 {
     fn from_iter<T: IntoIterator<Item = Field<'a, B>>>(iter: T) -> Self {
         let mut iter = iter.into_iter();
@@ -177,8 +142,7 @@ where
 impl<'a, M, B> Field<'a, B>
 where
     M: DirectionStructure<B>,
-    B: BoardToMap<()>,
-    B: Board<Structure = M, Index = <<B as BoardToMap<()>>::Map as IndexMap>::IndexType>,
+    B: BoardToMap<(), Structure = M>,
 {
     /// Note that the first element is self.
     ///
@@ -248,8 +212,7 @@ impl<'a, M, B, P> Iterator for Bidirectional<'a, M, B, P>
 where
     M: DirectionStructure<B>,
     M::Direction: DirectionReversable,
-    B: Board<Structure = M, Index = <<B as BoardToMap<()>>::Map as IndexMap>::IndexType>
-        + BoardToMap<()>,
+    B: BoardToMap<(), Structure = M>,
     P: FnMut(Field<'a, B>) -> bool,
 {
     type Item = Field<'a, B>;
