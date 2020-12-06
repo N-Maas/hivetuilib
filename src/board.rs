@@ -16,6 +16,7 @@ use std::{
 
 pub trait BoardIdxType: Copy + Eq + Debug {}
 
+// TODO: replace occurences with Into<index> - general solution for mutable access coming from field?
 pub trait Board: BoardIndexable {
     type Content;
     type Structure;
@@ -139,6 +140,7 @@ where
     type Offset;
 
     // should return a smallest common bound, i.e. i < b.bound() for a board b and every i with b.contains(i)
+    // TODO: is this required at all? Add minimum?
     fn bound(&self) -> Self::Index;
 
     fn wrapped(&self, index: Self::Offset) -> Self::Index;

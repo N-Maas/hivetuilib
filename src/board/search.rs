@@ -7,7 +7,7 @@ use super::{directions::DirectionReversable, *};
 
 // TODO: efficient set for boards with normal indizes
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct HashIndexMap<I: BoardIdxType + Hash, T> {
     map: HashMap<I, T>,
 }
@@ -60,7 +60,7 @@ impl<I: BoardIdxType + Hash, T> IndexMap for HashIndexMap<I, T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub(crate) struct SetWrapper<M: IndexMap<Item = ()>> {
     map: M,
 }
@@ -101,8 +101,7 @@ pub trait Searchable<'a> {
     fn search(self) -> SearchingSet<'a, Self::Map, Self::Board>;
 }
 
-impl<'a, B: BoardToMap<()>> Searchable<'a> for &'a B
-{
+impl<'a, B: BoardToMap<()>> Searchable<'a> for &'a B {
     type Map = <B as BoardToMap<()>>::Map;
     type Board = B;
 
@@ -111,8 +110,7 @@ impl<'a, B: BoardToMap<()>> Searchable<'a> for &'a B
     }
 }
 
-impl<'a, B: BoardToMap<()>> Searchable<'a> for Field<'a, B>
-{
+impl<'a, B: BoardToMap<()>> Searchable<'a> for Field<'a, B> {
     type Map = <B as BoardToMap<()>>::Map;
     type Board = B;
 
@@ -253,7 +251,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct SearchingSet<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
     base_set: SetWrapper<M>,
     board: &'a B,

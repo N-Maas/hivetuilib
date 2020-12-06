@@ -19,7 +19,7 @@ pub trait DirectionEnumerable: Copy + Eq + Sized {
 // TODO: trait for direction -> index mapping (efficient structure)
 // TODO: derive macro for Enumerable/index mapping
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Offset(pub isize);
 
 pub trait OffsetableIndex: BoardIdxType {

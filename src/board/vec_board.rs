@@ -9,7 +9,7 @@ use std::{
 };
 
 /// A one-dimensional immutable board.
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct VecBoard<T, S = ()> {
     content: Box<[T]>,
     structure: S,
@@ -109,7 +109,7 @@ impl<T, S, E> BoardToMap<E> for VecBoard<T, S> {
 
 // ----- the index belonging to a VecBoard -----
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Index1D {
     pub val: usize,
 }

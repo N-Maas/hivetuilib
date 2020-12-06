@@ -1,7 +1,7 @@
 use super::directions::*;
 use super::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct AdjacencySet<I: BoardIdxType + Hash> {
     edges: HashSet<(I, I)>,
 }
@@ -67,7 +67,7 @@ macro_rules! implNeighborhoodStructure {
 
 // ----- direction structures -----
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 pub struct OffsetStructure<I: OffsetableIndex, D: DirectionOffset<I::Offset>> {
     _i: PhantomData<I>,
     _d: PhantomData<D>,
@@ -114,7 +114,7 @@ where
     implNeighborhoodStructure!();
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 pub struct WrappedOffsetStructure<I: OffsetableIndex + PartialOrd, D: DirectionOffset<I::Offset>> {
     _i: PhantomData<I>,
     _d: PhantomData<D>,

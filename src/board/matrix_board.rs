@@ -9,7 +9,7 @@ use std::{
 };
 
 /// A two-dimensional immutable board. The fields are saved in a vec internally, calculating the index as necessary.
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MatrixBoard<T, S = ()> {
     content: Box<[T]>,
     num_cols: usize,

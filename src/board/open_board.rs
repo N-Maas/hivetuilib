@@ -10,7 +10,7 @@ use std::{
 
 // TODO:
 /// A two-dimensional board which can grow as needed. Supports inserting and removing single fields.
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct OpenBoard<T, S = ()> {
     columns: VecDeque<VecDeque<Option<T>>>,
     num_rows: usize,
