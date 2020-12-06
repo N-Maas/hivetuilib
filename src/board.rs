@@ -1,4 +1,5 @@
 pub mod directions;
+pub mod hypothetical;
 pub mod search;
 pub mod structures;
 
