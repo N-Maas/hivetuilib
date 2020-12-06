@@ -9,7 +9,7 @@ pub mod vec_board;
 
 use std::{
     cmp::Ordering, collections::HashSet, fmt::Debug, hash::Hash, iter::Copied, marker::PhantomData,
-    slice::Iter, vec::IntoIter,
+    mem, slice::Iter, vec::IntoIter,
 };
 
 // ----- trait definitions -----
@@ -217,9 +217,12 @@ impl<B: Board> Debug for Field<'_, B> {
     }
 }
 
-impl<'a, T, B: Board<Content = Option<T>>> Field<'a, B> {
+impl<'a, B: Board> Field<'a, B>
+where
+    B::Content: Emptyable,
+{
     pub fn is_empty(&self) -> bool {
-        self.content().is_none()
+        self.content().is_empty()
     }
 }
 
@@ -320,4 +323,34 @@ pub trait BoardToMap<T>: Board {
     type Map: IndexMap<Item = T, IndexType = Self::Index>;
 
     fn get_index_map(&self) -> Self::Map;
+}
+
+// ----- field -----
+
+pub trait Emptyable: Default {
+    fn is_empty(&self) -> bool;
+
+    fn take(&mut self) -> Self {
+        mem::take(self)
+    }
+
+    fn clear(&mut self) {
+        self.take();
+    }
+}
+
+impl<T> Emptyable for Option<T> {
+    fn is_empty(&self) -> bool {
+        self.is_none()
+    }
+}
+
+impl<T> Emptyable for Vec<T> {
+    fn is_empty(&self) -> bool {
+        self.is_empty()
+    }
+
+    fn clear(&mut self) {
+        self.clear()
+    }
 }

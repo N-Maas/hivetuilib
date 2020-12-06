@@ -1,4 +1,4 @@
-use super::{Board, BoardIndexable, BoardToMap, ContiguousBoard, IndexMap};
+use super::{Board, BoardIndexable, BoardToMap, ContiguousBoard, Emptyable, IndexMap};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Hypothetical<'a, T, B: BoardToMap<T, Content = T>> {
@@ -20,10 +20,13 @@ impl<T, B: BoardToMap<T, Content = T>> Hypothetical<'_, T, B> {
     }
 }
 
-impl<T, B: BoardToMap<Option<T>, Content = Option<T>>> Hypothetical<'_, Option<T>, B> {
+impl<T, B: BoardToMap<T, Content = T>> Hypothetical<'_, T, B>
+where
+    T: Emptyable,
+{
     pub fn clear_field(&mut self, index: B::Index) {
         self.assert_contained(index);
-        self.map.insert(index, None);
+        self.map.insert(index, Default::default());
     }
 
     pub fn apply_move(&mut self, from: B::Index, to: B::Index)
@@ -34,7 +37,7 @@ impl<T, B: BoardToMap<Option<T>, Content = Option<T>>> Hypothetical<'_, Option<T
         self.assert_contained(to);
         let value = self
             .map
-            .insert(from, None)
+            .insert(from, Default::default())
             // safe because checked previously
             .unwrap_or_else(|| self.board.get(from).unwrap().clone());
         self.map.insert(to, value);
