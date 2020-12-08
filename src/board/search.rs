@@ -79,7 +79,7 @@ impl<M: IndexMap<Item = ()>> SetWrapper<M> {
     }
 
     // TODO: this is a bit ugly, waiting for GATs..
-    pub fn iter(&self) -> impl ExactSizeIterator<Item = M::IndexType> {
+    pub fn iter(&self) -> M::Iter {
         self.map.iter_indices()
     }
 
@@ -126,14 +126,12 @@ impl<'a, B: BoardToMap<()> + 'a> FromIterator<Field<'a, B>>
 {
     fn from_iter<T: IntoIterator<Item = Field<'a, B>>>(iter: T) -> Self {
         let mut iter = iter.into_iter();
-        let first = iter.next();
-        first.map(|f| {
-            let mut set = f.search();
-            for field in iter {
-                set.insert(field.index());
-            }
-            set
-        })
+        let first = iter.next()?;
+        let mut set = first.search();
+        for field in iter {
+            set.insert(field.index());
+        }
+        Some(set)
     }
 }
 
@@ -251,6 +249,9 @@ where
     }
 }
 
+// TODO: remove implementation?!
+// TODO: searching set with paths?
+// TODO: consider laziness
 #[derive(Debug, PartialEq, Eq)]
 pub struct SearchingSet<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
     base_set: SetWrapper<M>,
@@ -287,10 +288,11 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         self.base_insert(el.into())
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = Field<'_, B>> {
-        self.base_set
-            .iter()
-            .map(move |i| self.board.get_field(i).unwrap())
+    pub fn iter(&self) -> Iter<'a, M, B> {
+        Iter {
+            board: self.board,
+            iter: self.base_set.iter(),
+        }
     }
 
     pub fn clear(&mut self) {
@@ -437,6 +439,41 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         for i in fields.iter() {
             self.base_insert(i);
         }
+    }
+}
+
+pub struct Iter<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
+    board: &'a B,
+    iter: M::Iter,
+}
+
+impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator for Iter<'a, M, B> {
+    type Item = Field<'a, B>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let idx = self.iter.next()?;
+        // unwrap: index is required to be valid
+        Some(self.board.get_field(idx).unwrap())
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+}
+
+impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> ExactSizeIterator
+    for Iter<'a, M, B>
+{
+}
+
+impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> IntoIterator
+    for SearchingSet<'a, M, B>
+{
+    type Item = Field<'a, B>;
+    type IntoIter = Iter<'a, M, B>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 

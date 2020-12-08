@@ -15,6 +15,7 @@ pub struct VecBoard<T, S = ()> {
     structure: S,
 }
 
+// TODO: default structure
 impl<T: Clone, S> VecBoard<T, S> {
     pub fn from_value(count: usize, val: T, structure: S) -> Self {
         Self {

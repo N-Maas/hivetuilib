@@ -177,22 +177,22 @@ impl<'a, B: Board> Field<'a, B> {
         }
     }
 
-    pub fn board(&self) -> &'a B {
+    pub fn board(self) -> &'a B {
         self.board
     }
 
-    pub fn index(&self) -> B::Index {
+    pub fn index(self) -> B::Index {
         self.index
     }
 
-    pub fn content(&self) -> &'a B::Content {
+    pub fn content(self) -> &'a B::Content {
         self.content_checked().expect(&format!(
             "Index of field is invalid: {:?} - perhaps the field was removed from the board?",
             self.index
         ))
     }
 
-    pub fn content_checked(&self) -> Option<&'a B::Content> {
+    pub fn content_checked(self) -> Option<&'a B::Content> {
         self.board.get(self.index)
     }
 }
@@ -223,7 +223,7 @@ impl<'a, B: Board> Field<'a, B>
 where
     B::Content: Emptyable,
 {
-    pub fn is_empty(&self) -> bool {
+    pub fn is_empty(self) -> bool {
         self.content().call_field_is_empty()
     }
 }
@@ -232,7 +232,7 @@ impl<'a, S, B: Board<Structure = S>> Field<'a, B>
 where
     S: AdjacencyStructure<B>,
 {
-    pub fn is_adjacent<T: Into<B::Index>>(&self, index: T) -> bool {
+    pub fn is_adjacent<T: Into<B::Index>>(self, index: T) -> bool {
         self.board
             .structure()
             .is_adjacent(self.board, self.index, index.into())
@@ -243,13 +243,13 @@ impl<'a, S, B: Board<Structure = S>> Field<'a, B>
 where
     S: NeighborhoodStructure<B>,
 {
-    pub fn neighbor_count(&self) -> usize {
+    pub fn neighbor_count(self) -> usize {
         self.board
             .structure()
             .neighbor_count(self.board, self.index)
     }
 
-    pub fn neighbors(&self) -> impl Iterator<Item = Field<'a, B>> {
+    pub fn neighbors(self) -> impl Iterator<Item = Field<'a, B>> {
         let board = self.board;
         board
             .structure()
@@ -263,7 +263,7 @@ impl<'a, S, B: Board<Structure = S>> Field<'a, B>
 where
     S: DirectionStructure<B>,
 {
-    pub fn next(&self, direction: S::Direction) -> Option<Self> {
+    pub fn next(self, direction: S::Direction) -> Option<Self> {
         let board = self.board;
         board
             .structure()
@@ -271,12 +271,12 @@ where
             .and_then(|i| Self::new(board, i))
     }
 
-    pub fn has_next(&self, direction: S::Direction) -> bool {
+    pub fn has_next(self, direction: S::Direction) -> bool {
         let board = self.board;
         board.structure().has_next(board, self.index, direction)
     }
 
-    pub fn neighbors_by_direction(&self) -> impl Iterator<Item = (S::Direction, Field<B>)>
+    pub fn neighbors_by_direction(self) -> impl Iterator<Item = (S::Direction, Field<'a, B>)>
     where
         S::Direction: DirectionEnumerable,
     {
