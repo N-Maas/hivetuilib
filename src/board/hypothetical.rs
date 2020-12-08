@@ -1,4 +1,4 @@
-use super::{Board, BoardIndexable, BoardToMap, ContiguousBoard, Emptyable, IndexMap};
+use super::{Board, BoardIndexable, BoardToMap, ContiguousBoard, Emptyable, Field, IndexMap};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Hypothetical<'a, T, B: BoardToMap<T, Content = T>> {
@@ -14,9 +14,24 @@ impl<T, B: BoardToMap<T, Content = T>> Hypothetical<'_, T, B> {
         }
     }
 
-    pub fn replace(&mut self, index: B::Index, el: T) {
+    pub fn replace(&mut self, index: impl Into<B::Index>, el: T) {
+        let index = index.into();
         self.assert_contained(index);
         self.map.insert(index, el);
+    }
+
+    pub fn from_board<'a>(board: &'a B) -> Hypothetical<'a, T, B> {
+        Hypothetical {
+            board,
+            map: board.get_index_map(),
+        }
+    }
+
+    pub fn from_field<'a>(field: Field<'a, B>) -> Hypothetical<'a, T, B> {
+        Hypothetical {
+            board: field.board(),
+            map: field.board().get_index_map(),
+        }
     }
 }
 
@@ -24,32 +39,26 @@ impl<T, B: BoardToMap<T, Content = T>> Hypothetical<'_, T, B>
 where
     T: Emptyable,
 {
-    pub fn clear_field(&mut self, index: B::Index) {
+    pub fn clear_field(&mut self, index: impl Into<B::Index>) {
+        let index = index.into();
         self.assert_contained(index);
         self.map.insert(index, Default::default());
     }
 
-    pub fn apply_move(&mut self, from: B::Index, to: B::Index)
+    pub fn apply_move(&mut self, from: impl Into<B::Index>, to: impl Into<B::Index>)
     where
         T: Clone,
     {
+        let from = from.into();
+        let to = to.into();
         self.assert_contained(from);
         self.assert_contained(to);
         let value = self
             .map
             .insert(from, Default::default())
-            // safe because checked previously
+            // unwrap: correct because checked previously
             .unwrap_or_else(|| self.board.get(from).unwrap().clone());
         self.map.insert(to, value);
-    }
-}
-
-impl<'a, T, B: BoardToMap<T, Content = T>> From<&'a B> for Hypothetical<'a, T, B> {
-    fn from(board: &'a B) -> Self {
-        Self {
-            board,
-            map: board.get_index_map(),
-        }
     }
 }
 
