@@ -222,7 +222,7 @@ where
     B::Content: Emptyable,
 {
     pub fn is_empty(&self) -> bool {
-        self.content().is_empty()
+        self.content().call_field_is_empty()
     }
 }
 
@@ -327,30 +327,32 @@ pub trait BoardToMap<T>: Board {
 
 // ----- field -----
 
+/// This trait is <b>not</b> intended to be used directly.
+/// It is used to probide generic access function on a higher level (e.g. for Fields).
 pub trait Emptyable: Default {
-    fn is_empty(&self) -> bool;
+    fn call_field_is_empty(&self) -> bool;
 
-    fn take(&mut self) -> Self {
+    fn call_take_field(&mut self) -> Self {
         mem::take(self)
     }
 
-    fn clear(&mut self) {
-        self.take();
+    fn call_clear_field(&mut self) {
+        self.call_take_field();
     }
 }
 
 impl<T> Emptyable for Option<T> {
-    fn is_empty(&self) -> bool {
+    fn call_field_is_empty(&self) -> bool {
         self.is_none()
     }
 }
 
 impl<T> Emptyable for Vec<T> {
-    fn is_empty(&self) -> bool {
+    fn call_field_is_empty(&self) -> bool {
         self.is_empty()
     }
 
-    fn clear(&mut self) {
+    fn call_clear_field(&mut self) {
         self.clear()
     }
 }
