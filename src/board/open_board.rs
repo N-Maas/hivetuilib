@@ -5,10 +5,11 @@ use super::{
 
 use std::{
     collections::VecDeque,
+    iter,
     ops::{Add, Index, IndexMut},
 };
 
-// TODO:
+// TODO: remove field
 /// A two-dimensional board which can grow as needed. Supports inserting and removing single fields.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct OpenBoard<T, S = ()> {
@@ -41,6 +42,18 @@ impl<T, S> OpenBoard<T, S> {
         }
     }
 
+    pub fn with_dimensions(num_rows: usize, num_cols: usize, structure: S) -> Self {
+        Self {
+            columns: iter::repeat_with(|| VecDeque::new())
+                .take(num_cols)
+                .collect(),
+            num_rows,
+            size: 0,
+            offset: (0, 0),
+            structure,
+        }
+    }
+
     pub fn num_cols(&self) -> usize {
         self.columns.len()
     }
@@ -49,11 +62,13 @@ impl<T, S> OpenBoard<T, S> {
         self.num_rows
     }
 
-    pub fn extend_and_insert(&mut self, index: OpenIndex, val: T) {
+    /// returns true if the field was not contained previously
+    pub fn extend_and_insert(&mut self, index: OpenIndex, val: T) -> bool {
         self.extend_to_index(index);
-        assert!(self.insert(index, val));
+        self.insert(index, val)
     }
 
+    /// returns true if the index is valid and the field was not contained previously
     pub fn insert(&mut self, index: OpenIndex, val: T) -> bool {
         self.calculate_index(index).map_or(false, |(x, y)| {
             if y < self.num_rows {
@@ -61,9 +76,21 @@ impl<T, S> OpenBoard<T, S> {
                     while y >= column.len() {
                         column.push_back(None);
                     }
-                    column[y] = Some(val);
                     self.size += 1;
-                    return true;
+                    return mem::replace(&mut column[y], Some(val)).is_none();
+                }
+            }
+            false
+        })
+    }
+
+    /// returns true if the field was successfully deleted
+    pub fn delete(&mut self, index: OpenIndex) -> bool {
+        self.calculate_index(index).map_or(false, |(x, y)| {
+            if let Some(column) = self.columns.get_mut(x) {
+                if y < column.len() {
+                    self.size -= 1;
+                    return column[y].take().is_some();
                 }
             }
             false
@@ -127,10 +154,19 @@ impl<T, I: Into<OpenIndex>, S> IndexMut<I> for OpenBoard<T, S> {
 
 impl<T, S> BoardIndexable for OpenBoard<T, S> {
     type Index = OpenIndex;
+    // TODO: this is wrong and not performant
     fn all_indices(&self) -> Vec<OpenIndex> {
         let (dx, dy) = self.offset;
-        (0 - dx..self.num_cols() as isize - dx)
-            .flat_map(|x| (0 - dy..self.num_rows() as isize - dy).map(move |y| OpenIndex { x, y }))
+        self.columns
+            .iter()
+            .enumerate()
+            .flat_map(|(x, col)| {
+                col.iter().enumerate().filter_map(move |(y, field)| {
+                    field
+                        .as_ref()
+                        .map(|_| OpenIndex::from((x as isize - dx, y as isize - dy)))
+                })
+            })
             .collect()
     }
 }
@@ -248,7 +284,23 @@ mod test {
         assert_eq!(board.num_cols(), 3);
         assert_eq!(board.num_rows(), 3);
         assert_eq!(board[(0, 0)], false);
+        assert!(board.contains((1, 1).into()));
+        assert!(!board.contains((0, 1).into()));
         board.extend_and_insert((-1, 1).into(), false);
         assert_eq!(board[(-1, 1)], false);
+        assert!(board.delete((-1, -1).into()));
+        assert!(!board.delete((1, 0).into()));
+        assert!(board.delete((-1, 1).into()));
+    }
+
+    #[test]
+    fn iter_test() {
+        let mut board = OpenBoard::<bool, ()>::with_dimensions(3, 3, ());
+        board.insert((1, 0).into(), true);
+        board.insert((0, 2).into(), true);
+        let indices = board.all_indices();
+        assert_eq!(indices.len(), 2);
+        assert!(indices.contains(&(1, 0).into()));
+        assert!(indices.contains(&(0, 2).into()));
     }
 }
