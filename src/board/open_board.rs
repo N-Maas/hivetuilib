@@ -224,10 +224,10 @@ impl<D> Add<D> for OpenIndex
 where
     D: DirectionOffset<<Self as OffsetableIndex>::Offset>,
 {
-    type Output = <Self as OffsetableIndex>::Offset;
+    type Output = Self;
 
-    fn add(self, rhs: D) -> Self::Output {
-        self.apply_offset(rhs.get_offset())
+    fn add(self, rhs: D) -> Self {
+        Self::from_offset(self.apply_offset(rhs.get_offset())).unwrap()
     }
 }
 

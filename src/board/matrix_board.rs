@@ -195,10 +195,10 @@ impl<D> Add<D> for Index2D
 where
     D: DirectionOffset<<Self as OffsetableIndex>::Offset>,
 {
-    type Output = <Self as OffsetableIndex>::Offset;
+    type Output = Option<Self>;
 
-    fn add(self, rhs: D) -> Self::Output {
-        self.apply_offset(rhs.get_offset())
+    fn add(self, rhs: D) -> Option<Self> {
+        Self::from_offset(self.apply_offset(rhs.get_offset()))
     }
 }
 
