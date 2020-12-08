@@ -12,6 +12,8 @@ use std::{
     mem, slice::Iter, vec::IntoIter,
 };
 
+use directions::DirectionEnumerable;
+
 // ----- trait definitions -----
 
 pub trait BoardIdxType: Copy + Eq + Debug {}
@@ -267,6 +269,18 @@ where
             .structure()
             .next(board, self.index, direction)
             .and_then(|i| Self::new(board, i))
+    }
+
+    pub fn has_next(&self, direction: S::Direction) -> bool {
+        let board = self.board;
+        board.structure().has_next(board, self.index, direction)
+    }
+
+    pub fn neighbors_by_direction(&self) -> impl Iterator<Item = (S::Direction, Field<B>)>
+    where
+        S::Direction: DirectionEnumerable,
+    {
+        S::Direction::enumerate_all().filter_map(move |d| self.next(d).map(|f| (d, f)))
     }
 }
 

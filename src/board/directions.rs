@@ -10,9 +10,30 @@ pub trait DirectionReversable: Copy + Eq {
 }
 
 pub trait DirectionEnumerable: Copy + Eq + Sized {
-    type Iter: Iterator<Item = Self>;
+    type Iter: ExactSizeIterator<Item = Self>;
 
     fn enumerate_all() -> Self::Iter;
+
+    fn next_direction(&self) -> Self {
+        let (idx, _) = Self::enumerate_all()
+            .enumerate()
+            .find(|(_, d)| d == self)
+            .expect("Enumeration of directions not complete!");
+        let mut iter = Self::enumerate_all();
+        // can not fail because of modulo and Iter being an ExactSizeIterator
+        iter.nth((idx + 1) % iter.len()).unwrap()
+    }
+
+    fn prev_direction(&self) -> Self {
+        let (idx, _) = Self::enumerate_all()
+            .enumerate()
+            .find(|(_, d)| d == self)
+            .expect("Enumeration of directions not complete!");
+        let mut iter = Self::enumerate_all();
+        // add iter.len() to avoid undeflow
+        // can not fail because of modulo and Iter being an ExactSizeIterator
+        iter.nth((iter.len() + idx - 1) % iter.len()).unwrap()
+    }
 }
 
 // TODO: Enumerable without reverse?
