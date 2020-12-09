@@ -117,3 +117,14 @@ where
         self.board.wrapped(index)
     }
 }
+
+impl<T, B, E> BoardToMap<E> for Hypothetical<'_, T, B>
+where
+    B: BoardToMap<T, Content = T> + BoardToMap<E>,
+{
+    type Map = <B as BoardToMap<E>>::Map;
+
+    fn get_index_map(&self) -> Self::Map {
+        BoardToMap::<E>::get_index_map(self.board)
+    }
+}
