@@ -29,6 +29,7 @@ where
     }
 }
 
+// TODO: replace with HashMap?!
 impl<I: BoardIdxType + Hash, T> IndexMap for HashIndexMap<I, T> {
     type IndexType = I;
     type Item = T;
@@ -44,6 +45,10 @@ impl<I: BoardIdxType + Hash, T> IndexMap for HashIndexMap<I, T> {
 
     fn get(&self, i: Self::IndexType) -> Option<&T> {
         self.map.get(&i)
+    }
+
+    fn get_mut(&mut self, i: Self::IndexType) -> Option<&mut T> {
+        self.map.get_mut(&i)
     }
 
     fn insert(&mut self, i: Self::IndexType, el: T) -> Option<T> {

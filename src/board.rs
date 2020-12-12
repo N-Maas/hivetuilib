@@ -337,6 +337,8 @@ pub trait IndexMap {
 
     fn get(&self, i: Self::IndexType) -> Option<&Self::Item>;
 
+    fn get_mut(&mut self, i: Self::IndexType) -> Option<&mut Self::Item>;
+
     /// Returns the old value if the key was already present.
     fn insert(&mut self, i: Self::IndexType, el: Self::Item) -> Option<Self::Item>;
 

@@ -1,4 +1,9 @@
-use super::{Board, BoardIndexable, BoardToMap, ContiguousBoard, Emptyable, Field, IndexMap};
+use std::ops::{Index, IndexMut};
+
+use super::{
+    Board, BoardIndexable, BoardMut, BoardToMap, ContiguousBoard, Emptyable, Field,
+    IndexMap,
+};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Hypothetical<'a, T, B: BoardToMap<T, Content = T>> {
@@ -18,7 +23,7 @@ impl<'a, T, B: BoardToMap<T, Content = T>> Hypothetical<'a, T, B> {
         self.board
     }
 
-    pub fn replace(&mut self, index: impl Into<B::Index>, el: T) {
+    pub fn set_field(&mut self, index: impl Into<B::Index>, el: T) {
         let index = index.into();
         self.assert_contained(index);
         self.map.insert(index, el);
@@ -104,6 +109,40 @@ impl<T, B: BoardToMap<T, Content = T>> Board for Hypothetical<'_, T, B> {
 
     fn get(&self, index: Self::Index) -> Option<&Self::Content> {
         self.map.get(index).or_else(|| self.board.get(index))
+    }
+}
+
+impl<T, B: BoardToMap<T, Content = T>> BoardMut for Hypothetical<'_, T, B>
+where
+    T: Clone,
+{
+    fn get_mut(&mut self, index: Self::Index) -> Option<&mut Self::Content> {
+        self.board.get(index).and_then(move |content| {
+            self.map.insert(index, content.clone());
+            self.map.get_mut(index)
+        })
+    }
+}
+
+impl<T, I, B: BoardToMap<T, Content = T>> Index<I> for Hypothetical<'_, T, B>
+where
+    B: Index<I>,
+{
+    type Output = B::Output;
+
+    fn index(&self, index: I) -> &Self::Output {
+        self.board.index(index)
+    }
+}
+
+impl<T, I, B: BoardToMap<T, Content = T>> IndexMut<I> for Hypothetical<'_, T, B>
+where
+    B: IndexMut<I, Output = T>,
+    I: Into<B::Index>,
+    T: Clone,
+{
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        self.get_mut(index.into()).expect(&format!("Invalid index."))
     }
 }
 
