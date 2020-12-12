@@ -6,12 +6,16 @@ pub struct Hypothetical<'a, T, B: BoardToMap<T, Content = T>> {
     map: B::Map,
 }
 
-impl<T, B: BoardToMap<T, Content = T>> Hypothetical<'_, T, B> {
+impl<'a, T, B: BoardToMap<T, Content = T>> Hypothetical<'a, T, B> {
     // TODO: is panicking a good idea?
     fn assert_contained(&self, index: B::Index) {
         if !self.board.contains(index) {
             panic!("invalid index: {:?}", index)
         }
+    }
+
+    pub fn original_board(&self) -> &'a B {
+        self.board
     }
 
     pub fn replace(&mut self, index: impl Into<B::Index>, el: T) {
@@ -20,14 +24,14 @@ impl<T, B: BoardToMap<T, Content = T>> Hypothetical<'_, T, B> {
         self.map.insert(index, el);
     }
 
-    pub fn from_board<'a>(board: &'a B) -> Hypothetical<'a, T, B> {
+    pub fn from_board(board: &'a B) -> Self {
         Hypothetical {
             board,
             map: board.get_index_map(),
         }
     }
 
-    pub fn from_field<'a>(field: Field<'a, B>) -> Hypothetical<'a, T, B> {
+    pub fn from_field(field: Field<'a, B>) -> Self {
         Hypothetical {
             board: field.board(),
             map: field.board().get_index_map(),

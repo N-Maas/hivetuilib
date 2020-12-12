@@ -14,10 +14,13 @@ use std::{
 
 use directions::DirectionEnumerable;
 
+use self::hypothetical::Hypothetical;
+
 // ----- trait definitions -----
 
 pub trait BoardIdxType: Copy + Eq + Debug {}
 
+// TODO: do not use impl Trait returns
 // TODO: replace occurences with Into<index> - general solution for mutable access coming from field?
 pub trait Board: BoardIndexable {
     type Content;
@@ -283,6 +286,17 @@ where
         S::Direction::enumerate_all().filter_map(move |d| self.next(d).map(|f| (d, f)))
     }
 }
+
+impl<'a, T, B: BoardToMap<T, Content = T>> Field<'a, Hypothetical<'a, T, B>> {
+    pub fn original_field<'b>(&self, board: &'b B) -> Field<'b, B> {
+        Field::new(board, self.index).expect(&format!(
+            "Index of field is invalid for original board: {:?}",
+            self.index
+        ))
+    }
+}
+
+// ----- structure traits -----
 
 pub trait AdjacencyStructure<B: Board> {
     fn is_adjacent(&self, board: &B, i: B::Index, j: B::Index) -> bool;

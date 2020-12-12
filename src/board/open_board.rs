@@ -10,6 +10,7 @@ use std::{
 };
 
 // TODO: remove field
+// TODO: use i32?!
 /// A two-dimensional board which can grow as needed. Supports inserting and removing single fields.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct OpenBoard<T, S = ()> {
@@ -60,6 +61,22 @@ impl<T, S> OpenBoard<T, S> {
 
     pub fn num_rows(&self) -> usize {
         self.num_rows
+    }
+
+    pub fn lower_x(&self) -> isize {
+        -self.offset.0
+    }
+
+    pub fn lower_y(&self) -> isize {
+        -self.offset.1
+    }
+
+    pub fn upper_x(&self) -> isize {
+        self.lower_x() + self.num_cols() as isize
+    }
+
+    pub fn upper_y(&self) -> isize {
+        self.lower_y() + self.num_rows as isize
     }
 
     /// returns true if the field was not contained previously
