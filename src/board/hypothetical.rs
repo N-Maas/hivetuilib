@@ -1,8 +1,7 @@
 use std::ops::{Index, IndexMut};
 
 use super::{
-    Board, BoardIndexable, BoardMut, BoardToMap, ContiguousBoard, Emptyable, Field,
-    IndexMap,
+    Board, BoardIndexable, BoardMut, BoardToMap, ContiguousBoard, Emptyable, Field, IndexMap,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -142,7 +141,7 @@ where
     T: Clone,
 {
     fn index_mut(&mut self, index: I) -> &mut Self::Output {
-        self.get_mut(index.into()).expect(&format!("Invalid index."))
+        self.get_mut(index.into()).expect("Invalid index.")
     }
 }
 

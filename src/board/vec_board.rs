@@ -28,9 +28,7 @@ impl<T: Clone, S> VecBoard<T, S> {
 impl<T: Default, S> VecBoard<T, S> {
     pub fn with_default(count: usize, structure: S) -> Self {
         Self {
-            content: iter::repeat_with(|| Default::default())
-                .take(count)
-                .collect(),
+            content: iter::repeat_with(Default::default).take(count).collect(),
             structure,
         }
     }
@@ -56,9 +54,7 @@ impl<T, S> BoardIndexable for VecBoard<T, S> {
     type Index = Index1D;
 
     fn all_indices(&self) -> Vec<Index1D> {
-        (0..self.content.len())
-            .map(|val| Index1D::from(val))
-            .collect()
+        (0..self.content.len()).map(Index1D::from).collect()
     }
 }
 

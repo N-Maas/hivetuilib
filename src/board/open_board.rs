@@ -45,9 +45,7 @@ impl<T, S> OpenBoard<T, S> {
 
     pub fn with_dimensions(num_rows: usize, num_cols: usize, structure: S) -> Self {
         Self {
-            columns: iter::repeat_with(|| VecDeque::new())
-                .take(num_cols)
-                .collect(),
+            columns: iter::repeat_with(VecDeque::new).take(num_cols).collect(),
             num_rows,
             size: 0,
             offset: (0, 0),

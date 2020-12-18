@@ -35,15 +35,15 @@ pub trait Board: BoardIndexable {
     fn structure(&self) -> &Self::Structure;
 
     // TODO better get_field_unchecked or similar?
-    fn get_field_unchecked<'a>(&'a self, index: Self::Index) -> Field<'a, Self>
+    fn get_field_unchecked(&self, index: Self::Index) -> Field<Self>
     where
         Self: Sized,
     {
         self.get_field(index)
-            .expect(&format!("invalid index: {:?}", index))
+            .unwrap_or_else(|| panic!("Invalid index: {:?}", index))
     }
 
-    fn get_field<'a>(&'a self, index: Self::Index) -> Option<Field<'a, Self>>
+    fn get_field(&self, index: Self::Index) -> Option<Field<Self>>
     where
         Self: Sized,
     {
@@ -189,10 +189,12 @@ impl<'a, B: Board> Field<'a, B> {
     }
 
     pub fn content(self) -> &'a B::Content {
-        self.content_checked().expect(&format!(
-            "Index of field is invalid: {:?} - perhaps the field was removed from the board?",
-            self.index
-        ))
+        self.content_checked().unwrap_or_else(|| {
+            panic!(
+                "Index of field is invalid: {:?} - perhaps the field was removed from the board?",
+                self.index
+            )
+        })
     }
 
     pub fn content_checked(self) -> Option<&'a B::Content> {
@@ -203,7 +205,7 @@ impl<'a, B: Board> Field<'a, B> {
 // TODO good idea to compare pointer?
 impl<'a, B: Board> PartialEq for Field<'a, B> {
     fn eq(&self, other: &Self) -> bool {
-        (self.board as *const B == other.board as *const B) && self.index == other.index
+        std::ptr::eq(self.board, other.board) && self.index == other.index
     }
 }
 
@@ -289,10 +291,12 @@ where
 
 impl<'a, T, B: BoardToMap<T, Content = T>> Field<'a, Hypothetical<'a, T, B>> {
     pub fn original_field<'b>(&self, board: &'b B) -> Field<'b, B> {
-        Field::new(board, self.index).expect(&format!(
-            "Index of field is invalid for original board: {:?}",
-            self.index
-        ))
+        Field::new(board, self.index).unwrap_or_else(|| {
+            panic!(
+                "Index of field is invalid for original board: {:?}",
+                self.index
+            )
+        })
     }
 }
 

@@ -49,7 +49,7 @@ impl<T: Clone, S> MatrixBoard<T, S> {
 impl<T: Default, S> MatrixBoard<T, S> {
     pub fn with_default(num_cols: usize, num_rows: usize, structure: S) -> Self {
         Self {
-            content: iter::repeat_with(|| Default::default())
+            content: iter::repeat_with(Default::default)
                 .take(num_cols * num_rows)
                 .collect(),
             num_cols,
