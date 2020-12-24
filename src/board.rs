@@ -346,6 +346,8 @@ pub trait IndexMap {
     /// Returns the old value if the key was already present.
     fn insert(&mut self, i: Self::IndexType, el: Self::Item) -> Option<Self::Item>;
 
+    fn retain(&mut self, filter: impl FnMut(Self::IndexType, &mut Self::Item) -> bool);
+
     fn iter_indices(&self) -> Self::Iter;
 
     fn clear(&mut self);

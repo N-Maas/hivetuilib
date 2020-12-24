@@ -55,6 +55,10 @@ impl<I: BoardIdxType + Hash, T> IndexMap for HashIndexMap<I, T> {
         self.map.insert(i, el)
     }
 
+    fn retain(&mut self, mut filter: impl FnMut(Self::IndexType, &mut T) -> bool) {
+        self.map.retain(|&i, t| filter(i, t));
+    }
+
     // TODO: this is a bit ugly, waiting for GATs..
     fn iter_indices(&self) -> Self::Iter {
         self.map.keys().copied().collect::<Vec<_>>().into_iter()
@@ -99,6 +103,7 @@ impl<M: IndexMap<Item = ()>> From<M> for SetWrapper<M> {
     }
 }
 
+// TODO: is this trait necessary at all?
 pub trait Searchable<'a> {
     type Map: IndexMap<Item = ()>;
     type Board: Board<Index = <Self::Map as IndexMap>::IndexType>;
@@ -254,13 +259,34 @@ where
     }
 }
 
-// TODO: remove implementation?!
-// TODO: searching set with paths?
+// TODO: method for removing field?!
 // TODO: consider laziness
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Eq)]
 pub struct SearchingSet<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
     base_set: SetWrapper<M>,
     board: &'a B,
+}
+
+impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> PartialEq
+    for SearchingSet<'a, M, B>
+where
+    M: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.base_set.eq(&other.base_set)
+    }
+}
+
+impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Clone for SearchingSet<'a, M, B>
+where
+    M: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            base_set: self.base_set.clone(),
+            board: self.board,
+        }
+    }
 }
 
 impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a, M, B> {
