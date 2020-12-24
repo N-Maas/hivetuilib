@@ -1,6 +1,7 @@
 pub mod directions;
 pub mod hypothetical;
 pub mod search;
+pub mod search_tree;
 pub mod structures;
 
 pub mod matrix_board;

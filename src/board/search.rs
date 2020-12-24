@@ -261,7 +261,8 @@ where
 
 // TODO: method for removing field?!
 // TODO: consider laziness
-#[derive(Debug, Eq)]
+// TODO: default value for M possible?
+#[derive(Debug, Eq, Clone)]
 pub struct SearchingSet<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
     base_set: SetWrapper<M>,
     board: &'a B,
@@ -274,18 +275,6 @@ where
 {
     fn eq(&self, other: &Self) -> bool {
         self.base_set.eq(&other.base_set)
-    }
-}
-
-impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Clone for SearchingSet<'a, M, B>
-where
-    M: Clone,
-{
-    fn clone(&self) -> Self {
-        Self {
-            base_set: self.base_set.clone(),
-            board: self.board,
-        }
     }
 }
 
