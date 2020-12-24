@@ -259,8 +259,10 @@ where
     }
 }
 
+// Equally applicable to SearchingTree:
 // TODO: method for removing field?!
 // TODO: consider laziness
+// TODO: hooks
 // TODO: default value for M possible?
 #[derive(Debug, Eq)]
 pub struct SearchingSet<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
@@ -437,9 +439,10 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         self.replace_helper(self.apply_growth(predicate))
     }
 
+    // TODO: we need a clear policy here - is panicking always appropriate?
     fn base_insert(&mut self, i: B::Index) -> bool {
         if !self.board.contains(i) {
-            panic!("Field with invalid index.");
+            panic!("Field with invalid index: {:?}", i);
         }
         self.base_set.insert(i)
     }
@@ -455,13 +458,14 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         iter.flat_map(|f| map_fields(f).into_iter()).collect()
     }
 
+    // TODO: allow FnMut
     fn apply_growth<F>(&self, predicate: F) -> FieldSearchResult<B::Index>
     where
         F: Fn(Field<B>) -> bool,
         B::Structure: NeighborhoodStructure<B>,
     {
         self.iter()
-            .flat_map(|f| f.neighbors().filter(|f| predicate(*f)))
+            .flat_map(|f| f.neighbors().filter(|&f| predicate(f)))
             .map(|f| f.index())
             .collect()
     }

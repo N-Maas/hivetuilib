@@ -25,6 +25,7 @@ pub trait BoardIdxType: Copy + Eq + Debug {}
 // TODO: replace occurences with Into<index> - general solution for mutable access coming from field?
 pub trait Board: BoardIndexable {
     type Content;
+    // TODO: add trait bound?
     type Structure;
 
     fn size(&self) -> usize;

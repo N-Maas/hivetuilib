@@ -1,7 +1,8 @@
-use super::{search::SetWrapper, *};
+use super::{
+    search::{FieldSearchResult, SetWrapper},
+    *,
+};
 
-// TODO: method for removing field?!
-// TODO: consider laziness
 #[derive(Debug, Eq)]
 pub struct SearchingTree<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
     base_set: SetWrapper<M>,
@@ -55,12 +56,23 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingTree<'
         self.base_set.size()
     }
 
+    pub fn num_active_paths(&self) -> usize {
+        self.open_paths.len()
+    }
+
     pub fn board(&self) -> &'a B {
         self.board
     }
 
     pub fn contains<T: Into<B::Index>>(&self, el: T) -> bool {
         self.base_set.contains(el.into())
+    }
+
+    pub fn iter_paths(&self) -> PathIter<M, B> {
+        PathIter {
+            inner: self.open_paths.iter(),
+            searching_tree: self,
+        }
     }
 
     pub fn insert_root<T: Into<B::Index>>(&mut self, el: T) {
@@ -74,8 +86,128 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingTree<'
         self.open_paths.push((parent, 1));
     }
 
-    // retain paths, reopen_all_paths, iter_paths, ..
+    // TODO: a bit of code duplication here
+    pub fn extend_with<F>(&mut self, mut map_fields: F) -> bool
+    where
+        F: FnMut(&Self, Path<M, B>) -> FieldSearchResult<B::Index>,
+    {
+        let old_paths = mem::replace(&mut self.open_paths, Vec::new());
+        let mut success = false;
+        for (tree_index, length) in old_paths {
+            let path = Path::new(tree_index, length, self);
+            let old_idx = path.endpoint().index();
+            let new_indices = map_fields(self, path);
+
+            for i in new_indices {
+                success = true;
+                if i == old_idx {
+                    self.insert_new_endpoint(i, self.tree[tree_index].0, length);
+                } else {
+                    self.insert_new_endpoint(i, tree_index, length + 1);
+                }
+            }
+        }
+        success
+    }
+
+    pub fn extend<F>(&mut self, map_fields: F, mode: SearchMode) -> bool
+    where
+        F: FnMut(Field<B>) -> FieldSearchResult<B::Index>,
+    {
+        match mode {
+            SearchMode::NewFieldsOnly => {
+                self.extend_by_overlap(map_fields, |i, t, _| t.contains(i))
+            }
+            SearchMode::NoCycles => self.extend_by_overlap(map_fields, |i, _, p| p.contains(i)),
+            SearchMode::AnyFields => self.extend_by_overlap(map_fields, |_, _, _| false),
+        }
+    }
+
+    pub fn grow<F>(&mut self, mut predicate: F, mode: SearchMode) -> bool
+    where
+        F: FnMut(Field<B>) -> bool,
+        B::Structure: NeighborhoodStructure<B>,
+    {
+        self.extend(
+            |f| {
+                f.neighbors()
+                    .filter(|&n| predicate(n))
+                    .map(|n| n.index())
+                    .collect()
+            },
+            mode,
+        )
+    }
+
+    fn extend_by_overlap<F, G>(&mut self, mut map_fields: F, is_overlap: G) -> bool
+    where
+        F: FnMut(Field<B>) -> FieldSearchResult<B::Index>,
+        G: Fn(B::Index, &Self, Path<M, B>) -> bool,
+    {
+        let old_paths = mem::replace(&mut self.open_paths, Vec::new());
+        let mut success = false;
+        for (tree_index, length) in old_paths {
+            let field = Path::new(tree_index, 1, self).endpoint();
+            let old_idx = field.index();
+            let new_indices = map_fields(field);
+
+            for i in new_indices {
+                if !is_overlap(i, self, Path::new(tree_index, length, self)) {
+                    success = true;
+                    if i == old_idx {
+                        self.insert_new_endpoint(i, self.tree[tree_index].0, length);
+                    } else {
+                        self.insert_new_endpoint(i, tree_index, length + 1);
+                    }
+                }
+            }
+        }
+        success
+    }
+
+    fn insert_new_endpoint(&mut self, i: B::Index, parent: usize, length: usize) {
+        if !self.board.contains(i) {
+            panic!("Field with invalid index: {:?}", i);
+        }
+        let tree_index = self.tree.len();
+        self.base_set.insert(i);
+        self.tree.push((parent, i));
+        self.open_paths.push((tree_index, length));
+    }
+
+    // retain paths, reopen_all_paths, iter_fields, ..
     // reopen_roots?
+    // perform_dfs
+}
+
+pub enum SearchMode {
+    NewFieldsOnly,
+    NoCycles,
+    AnyFields,
+}
+
+pub struct PathIter<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
+    inner: Iter<'a, (usize, usize)>,
+    searching_tree: &'a SearchingTree<'a, M, B>,
+}
+
+impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator for PathIter<'a, M, B> {
+    type Item = Path<'a, M, B>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner
+            .next()
+            .map(|&(tree_index, length)| Path::new(tree_index, length, self.searching_tree))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> ExactSizeIterator
+    for PathIter<'a, M, B>
+{
 }
 
 // ----- implementation of the Path API for a SearchingTree ----
@@ -143,8 +275,8 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Path<'a, M, B> 
         }
     }
 
-    pub fn iter_subpaths(&self) -> PathIter<'a, M, B> {
-        PathIter {
+    pub fn iter_subpaths(&self) -> SubpathIter<'a, M, B> {
+        SubpathIter {
             current: Some(*self),
         }
     }
@@ -186,11 +318,13 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Clone for Path<
 impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Copy for Path<'a, M, B> {}
 
 #[derive(Debug, Clone)]
-pub struct PathIter<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
+pub struct SubpathIter<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
     current: Option<Path<'a, M, B>>,
 }
 
-impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator for PathIter<'a, M, B> {
+impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator
+    for SubpathIter<'a, M, B>
+{
     type Item = Path<'a, M, B>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -206,13 +340,13 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator for Pa
 }
 
 impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> ExactSizeIterator
-    for PathIter<'a, M, B>
+    for SubpathIter<'a, M, B>
 {
 }
 
 #[derive(Debug, Clone)]
 pub struct PointIter<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
-    inner: PathIter<'a, M, B>,
+    inner: SubpathIter<'a, M, B>,
 }
 
 impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator for PointIter<'a, M, B> {
@@ -230,14 +364,17 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator for Po
 #[cfg(test)]
 mod test {
     use crate::board::{
-        vec_board::{Index1D, VecBoard},
+        directions::{BinaryDirection, GridDiagDirection},
+        matrix_board::*,
+        structures::{OffsetStructure, WrappedOffsetStructure},
+        vec_board::*,
         BoardToMap,
     };
 
-    use super::{Path, SearchingTree};
+    use super::{Path, SearchMode, SearchingTree};
 
     #[test]
-    fn basic_test() {
+    fn path_test() {
         type TestBoard = VecBoard<usize>;
 
         let board = TestBoard::with_default(1, ());
@@ -250,5 +387,46 @@ mod test {
         let path_2 = path_1;
         assert!(path_1 == path_2);
         tree.insert_root(Index1D::from(0));
+    }
+
+    #[test]
+    fn basic_test() {
+        type TestBoard = MatrixBoard<usize, OffsetStructure<Index2D, GridDiagDirection>>;
+
+        let board = TestBoard::with_default(2, 2, OffsetStructure::new());
+        let mut tree = SearchingTree::<<TestBoard as BoardToMap<()>>::Map, TestBoard>::new(&board);
+        tree.insert_root(Index2D::from((0, 0)));
+        tree.extend_with(|_, path| path.endpoint().neighbors().collect());
+        let paths = tree.iter_paths().collect::<Vec<_>>();
+        assert_eq!(paths.len(), 3);
+        let expected = vec![
+            Index2D::from((1, 0)),
+            Index2D::from((1, 1)),
+            Index2D::from((0, 1)),
+        ];
+        assert!((paths[0] != paths[1]) && (paths[1]) != (paths[2]) && (paths[0] != paths[2]));
+        for p in paths {
+            assert_eq!(p.len(), 2);
+            assert!(expected.contains(&p.endpoint().index()));
+        }
+    }
+
+    #[test]
+    fn no_cylce_mode_test() {
+        type TestBoard = VecBoard<usize, WrappedOffsetStructure<Index1D, BinaryDirection>>;
+
+        let board = TestBoard::with_default(3, WrappedOffsetStructure::new());
+        let mut tree = SearchingTree::<<TestBoard as BoardToMap<()>>::Map, TestBoard>::new(&board);
+        tree.insert_root(Index1D::from(1));
+        tree.extend(|f| f.neighbors().collect(), SearchMode::NoCycles);
+        tree.extend(|f| f.neighbors().collect(), SearchMode::NoCycles);
+        let paths = tree.iter_paths().collect::<Vec<_>>();
+        assert_eq!(paths.len(), 2);
+        let expected = vec![Index1D::from(0), Index1D::from(2)];
+        assert!(paths[0] != paths[1]);
+        for p in paths {
+            assert_eq!(p.len(), 3);
+            assert!(expected.contains(&p.endpoint().index()));
+        }
     }
 }
