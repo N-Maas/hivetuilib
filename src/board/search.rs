@@ -262,7 +262,7 @@ where
 // TODO: method for removing field?!
 // TODO: consider laziness
 // TODO: default value for M possible?
-#[derive(Debug, Eq, Clone)]
+#[derive(Debug, Eq)]
 pub struct SearchingSet<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
     base_set: SetWrapper<M>,
     board: &'a B,
@@ -275,6 +275,18 @@ where
 {
     fn eq(&self, other: &Self) -> bool {
         self.base_set.eq(&other.base_set)
+    }
+}
+
+impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Clone for SearchingSet<'a, M, B>
+where
+    M: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            base_set: self.base_set.clone(),
+            board: self.board,
+        }
     }
 }
 
@@ -296,6 +308,10 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         }
     }
 
+    pub fn board(&self) -> &'a B {
+        self.board
+    }
+
     pub fn size(&self) -> usize {
         self.base_set.size()
     }
@@ -304,8 +320,13 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         self.base_set.contains(el.into())
     }
 
+    /// panics if the provided index is invalid
     pub fn insert<T: Into<B::Index>>(&mut self, el: T) -> bool {
-        self.base_insert(el.into())
+        let idx = el.into();
+        if !self.board.contains(idx) {
+            panic!("Invalid index provided: {:?}", idx);
+        }
+        self.base_insert(idx)
     }
 
     pub fn iter(&self) -> Iter<'a, M, B> {
@@ -462,6 +483,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Iter<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
     board: &'a B,
     iter: M::Iter,
