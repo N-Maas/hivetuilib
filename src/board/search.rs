@@ -95,6 +95,10 @@ impl<M: IndexMap<Item = ()>> SetWrapper<M> {
     pub fn clear(&mut self) {
         self.map.clear()
     }
+
+    pub fn into_map(self) -> M {
+        self.map
+    }
 }
 
 impl<M: IndexMap<Item = ()>> From<M> for SetWrapper<M> {
@@ -286,7 +290,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         }
     }
 
-    pub fn with_map(map: M, board: &'a B) -> Self {
+    pub fn from_map(map: M, board: &'a B) -> Self {
         Self {
             base_set: map.into(),
             board,

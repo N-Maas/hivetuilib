@@ -1,3 +1,5 @@
+use search::SearchingSet;
+
 use super::{
     search::{FieldSearchResult, SetWrapper},
     *,
@@ -148,6 +150,21 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingTree<'
             },
             mode,
         )
+    }
+
+    pub fn into_set(self) -> SearchingSet<'a, M, B> {
+        SearchingSet::from_map(self.base_set.into_map(), self.board)
+    }
+
+    pub fn into_endpoint_set(self) -> SearchingSet<'a, M, B>
+    where
+        B: BoardToMap<(), Map = M>,
+    {
+        let mut set = SearchingSet::new(self.board);
+        for p in self.iter_paths() {
+            set.insert(p.endpoint().index());
+        }
+        set
     }
 
     fn extend_by_overlap<F, G>(&mut self, mut map_fields: F, is_overlap: G) -> bool
