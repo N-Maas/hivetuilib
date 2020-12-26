@@ -8,7 +8,7 @@ use super::{directions::DirectionReversable, *};
 // TODO: efficient set for boards with normal indizes
 
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
-pub struct HashIndexMap<I: BoardIdxType + Hash, T> {
+pub struct HashIndexMap<I: BoardIdxType + Hash, T = ()> {
     map: HashMap<I, T>,
 }
 
@@ -103,34 +103,6 @@ impl<M: IndexMap<Item = ()>> From<M> for SetWrapper<M> {
     }
 }
 
-// TODO: is this trait necessary at all?
-pub trait Searchable<'a> {
-    type Map: IndexMap<Item = ()>;
-    type Board: Board<Index = <Self::Map as IndexMap>::IndexType>;
-
-    fn search(self) -> SearchingSet<'a, Self::Map, Self::Board>;
-}
-
-impl<'a, B: BoardToMap<()>> Searchable<'a> for &'a B {
-    type Map = <B as BoardToMap<()>>::Map;
-    type Board = B;
-
-    fn search(self) -> SearchingSet<'a, Self::Map, Self::Board> {
-        SearchingSet::with_map(self.get_index_map(), self)
-    }
-}
-
-impl<'a, B: BoardToMap<()>> Searchable<'a> for Field<'a, B> {
-    type Map = <B as BoardToMap<()>>::Map;
-    type Board = B;
-
-    fn search(self) -> SearchingSet<'a, Self::Map, Self::Board> {
-        let mut set = self.board().search();
-        set.insert(self.index());
-        set
-    }
-}
-
 impl<'a, B: BoardToMap<()> + 'a> FromIterator<Field<'a, B>>
     for Option<SearchingSet<'a, B::Map, B>>
 {
@@ -142,6 +114,17 @@ impl<'a, B: BoardToMap<()> + 'a> FromIterator<Field<'a, B>>
             set.insert(field.index());
         }
         Some(set)
+    }
+}
+
+impl<'a, B> Field<'a, B>
+where
+    B: BoardToMap<()>,
+{
+    pub fn search(self) -> SearchingSet<'a, B::Map, B> {
+        let mut set = SearchingSet::new(self.board);
+        set.insert(self.index());
+        set
     }
 }
 
@@ -295,10 +278,10 @@ where
 impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a, M, B> {
     pub fn new(board: &'a B) -> Self
     where
-        M: From<&'a B>,
+        B: BoardToMap<(), Map = M>,
     {
         Self {
-            base_set: M::from(board).into(),
+            base_set: board.get_index_map().into(),
             board,
         }
     }

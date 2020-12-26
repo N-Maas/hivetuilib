@@ -1,6 +1,11 @@
+use search_tree::SearchingTree;
+
 use super::{
-    directions::DirectionOffset, directions::Offset, directions::OffsetableIndex,
-    search::HashIndexMap, BoardToMap, *,
+    directions::DirectionOffset,
+    directions::Offset,
+    directions::OffsetableIndex,
+    search::{HashIndexMap, SearchingSet},
+    BoardToMap, *,
 };
 
 use std::{
@@ -16,23 +21,37 @@ pub struct VecBoard<T, S = ()> {
 }
 
 // TODO: default structure
-impl<T: Clone, S> VecBoard<T, S> {
-    pub fn from_value(count: usize, val: T, structure: S) -> Self {
+impl<T, S> VecBoard<T, S> {
+    pub fn from_value(count: usize, val: T, structure: S) -> Self
+    where
+        T: Clone,
+    {
         Self {
             content: iter::repeat(val).take(count).collect(),
             structure,
         }
     }
-}
 
-impl<T: Default, S> VecBoard<T, S> {
-    pub fn with_default(count: usize, structure: S) -> Self {
+    pub fn with_default(count: usize, structure: S) -> Self
+    where
+        T: Default,
+    {
         Self {
             content: iter::repeat_with(Default::default).take(count).collect(),
             structure,
         }
     }
+
+    pub fn search(&self) -> SearchingSet<HashIndexMap<Index1D>, Self> {
+        SearchingSet::new(self)
+    }
+
+    pub fn search_tree(&self) -> SearchingTree<HashIndexMap<Index1D>, Self> {
+        SearchingTree::new(self)
+    }
 }
+
+impl<T: Default, S> VecBoard<T, S> {}
 
 // TODO: builder
 

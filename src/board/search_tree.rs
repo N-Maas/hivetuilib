@@ -3,6 +3,17 @@ use super::{
     *,
 };
 
+impl<'a, B> Field<'a, B>
+where
+    B: BoardToMap<()>,
+{
+    pub fn search_tree(self) -> SearchingTree<'a, B::Map, B> {
+        let mut tree = SearchingTree::new(self.board);
+        tree.insert_root(self.index());
+        tree
+    }
+}
+
 #[derive(Debug, Eq)]
 pub struct SearchingTree<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
     base_set: SetWrapper<M>,
@@ -42,10 +53,10 @@ where
 impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingTree<'a, M, B> {
     pub fn new(board: &'a B) -> Self
     where
-        M: From<&'a B>,
+        B: BoardToMap<(), Map = M>,
     {
         Self {
-            base_set: M::from(board).into(),
+            base_set: board.get_index_map().into(),
             tree: Vec::new(),
             open_paths: Vec::new(),
             board,

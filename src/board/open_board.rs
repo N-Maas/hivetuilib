@@ -1,6 +1,10 @@
 use super::{
-    directions::DirectionOffset, directions::Offset, directions::OffsetableIndex,
-    search::HashIndexMap, BoardToMap, *,
+    directions::DirectionOffset,
+    directions::Offset,
+    directions::OffsetableIndex,
+    search::{HashIndexMap, SearchingSet},
+    search_tree::SearchingTree,
+    BoardToMap, *,
 };
 
 use std::{
@@ -110,6 +114,14 @@ impl<T, S> OpenBoard<T, S> {
             }
             false
         })
+    }
+
+    pub fn search(&self) -> SearchingSet<HashIndexMap<OpenIndex>, Self> {
+        SearchingSet::new(self)
+    }
+
+    pub fn search_tree(&self) -> SearchingTree<HashIndexMap<OpenIndex>, Self> {
+        SearchingTree::new(self)
     }
 
     fn extend_to_index(&mut self, index: OpenIndex) {

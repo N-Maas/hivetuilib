@@ -1,6 +1,10 @@
 use super::{
-    directions::DirectionOffset, directions::Offset, directions::OffsetableIndex,
-    search::HashIndexMap, BoardToMap, *,
+    directions::DirectionOffset,
+    directions::Offset,
+    directions::OffsetableIndex,
+    search::{HashIndexMap, SearchingSet},
+    search_tree::SearchingTree,
+    BoardToMap, *,
 };
 
 use std::{
@@ -18,11 +22,29 @@ pub struct MatrixBoard<T, S = ()> {
 }
 
 impl<T, S> MatrixBoard<T, S> {
-    fn calculate_index(&self, index: Index2D) -> Option<usize> {
-        if index.x < self.num_cols && index.y < self.num_rows {
-            Some(index.y * self.num_rows + index.x)
-        } else {
-            None
+    pub fn from_value(num_cols: usize, num_rows: usize, val: T, structure: S) -> Self
+    where
+        T: Clone,
+    {
+        Self {
+            content: iter::repeat(val).take(num_cols * num_rows).collect(),
+            num_cols,
+            num_rows,
+            structure,
+        }
+    }
+
+    pub fn with_default(num_cols: usize, num_rows: usize, structure: S) -> Self
+    where
+        T: Default,
+    {
+        Self {
+            content: iter::repeat_with(Default::default)
+                .take(num_cols * num_rows)
+                .collect(),
+            num_cols,
+            num_rows,
+            structure,
         }
     }
 
@@ -33,28 +55,20 @@ impl<T, S> MatrixBoard<T, S> {
     pub fn num_rows(&self) -> usize {
         self.num_rows
     }
-}
 
-impl<T: Clone, S> MatrixBoard<T, S> {
-    pub fn from_value(num_cols: usize, num_rows: usize, val: T, structure: S) -> Self {
-        Self {
-            content: iter::repeat(val).take(num_cols * num_rows).collect(),
-            num_cols,
-            num_rows,
-            structure,
-        }
+    pub fn search(&self) -> SearchingSet<HashIndexMap<Index2D>, Self> {
+        SearchingSet::new(self)
     }
-}
 
-impl<T: Default, S> MatrixBoard<T, S> {
-    pub fn with_default(num_cols: usize, num_rows: usize, structure: S) -> Self {
-        Self {
-            content: iter::repeat_with(Default::default)
-                .take(num_cols * num_rows)
-                .collect(),
-            num_cols,
-            num_rows,
-            structure,
+    pub fn search_tree(&self) -> SearchingTree<HashIndexMap<Index2D>, Self> {
+        SearchingTree::new(self)
+    }
+
+    fn calculate_index(&self, index: Index2D) -> Option<usize> {
+        if index.x < self.num_cols && index.y < self.num_rows {
+            Some(index.y * self.num_rows + index.x)
+        } else {
+            None
         }
     }
 }
