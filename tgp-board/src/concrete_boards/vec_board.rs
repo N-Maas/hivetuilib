@@ -1,11 +1,7 @@
-use search_tree::SearchingTree;
-
-use super::{
-    directions::DirectionOffset,
-    directions::Offset,
-    directions::OffsetableIndex,
-    search::{HashIndexMap, SearchingSet},
-    BoardToMap, *,
+use crate::{
+    search::{HashIndexMap, SearchingSet, SearchingTree},
+    structures::directions::{DirectionOffset, Offset, OffsetableIndex},
+    Board, BoardIdxType, BoardIndexable, BoardMut, BoardToMap, ContiguousBoard, Field,
 };
 
 use std::{

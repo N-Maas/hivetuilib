@@ -1,40 +1,11 @@
-use super::directions::*;
-use super::*;
+use std::marker::PhantomData;
 
-#[derive(Debug, PartialEq, Eq, Clone, Default)]
-pub struct AdjacencySet<I: BoardIdxType + Hash> {
-    edges: HashSet<(I, I)>,
-}
+use crate::trait_definitions::{Board, ContiguousBoard};
 
-impl<I: BoardIdxType + Hash> AdjacencySet<I> {
-    pub fn new() -> Self {
-        Self {
-            edges: HashSet::new(),
-        }
-    }
-
-    pub fn add_directed(&mut self, i: I, j: I) {
-        self.edges.insert((i, j));
-    }
-
-    pub fn add_undirected(&mut self, i: I, j: I) {
-        self.edges.insert((i, j));
-        self.edges.insert((j, i));
-    }
-
-    pub fn iter_edges(&self) -> impl Iterator<Item = &(I, I)> {
-        self.edges.iter()
-    }
-}
-
-impl<B: Board> AdjacencyStructure<B> for AdjacencySet<B::Index>
-where
-    B::Index: Hash,
-{
-    fn is_adjacent(&self, _board: &B, i: B::Index, j: B::Index) -> bool {
-        self.edges.contains(&(i, j))
-    }
-}
+use super::{
+    directions::{DirectionEnumerable, DirectionOffset, OffsetableIndex},
+    AdjacencyStructure, DirectionStructure, NeighborhoodStructure,
+};
 
 // ----- macros for simpler implementation of direction structures -----
 macro_rules! implAdjacencyStructure {
@@ -64,8 +35,6 @@ macro_rules! implNeighborhoodStructure {
         }
     };
 }
-
-// ----- direction structures -----
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 pub struct OffsetStructure<I: OffsetableIndex, D: DirectionOffset<I::Offset>> {

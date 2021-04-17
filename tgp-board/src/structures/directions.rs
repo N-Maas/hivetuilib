@@ -1,4 +1,6 @@
-use super::*;
+use std::{iter::Copied, slice::Iter};
+
+use crate::trait_definitions::BoardIdxType;
 
 // TODO: move type parameter to associated type?
 pub trait DirectionOffset<O>: Copy + Eq {

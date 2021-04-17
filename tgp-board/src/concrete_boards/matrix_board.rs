@@ -1,13 +1,11 @@
-use super::{
-    directions::DirectionOffset,
-    directions::Offset,
-    directions::OffsetableIndex,
-    search::{HashIndexMap, SearchingSet},
-    search_tree::SearchingTree,
-    BoardToMap, *,
+use crate::{
+    search::{HashIndexMap, SearchingSet, SearchingTree},
+    structures::directions::{DirectionOffset, Offset, OffsetableIndex},
+    Board, BoardIdxType, BoardIndexable, BoardMut, BoardToMap, ContiguousBoard, Field,
 };
 
 use std::{
+    cmp::Ordering,
     iter,
     ops::{Add, Index, IndexMut},
 };

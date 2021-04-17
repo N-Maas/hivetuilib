@@ -1,20 +1,8 @@
-use search::SearchingSet;
+use std::{mem, slice::Iter};
 
-use super::{
-    search::{FieldSearchResult, SetWrapper},
-    *,
-};
+use crate::{structures::NeighborhoodStructure, Board, BoardToMap, Field, IndexMap};
 
-impl<'a, B> Field<'a, B>
-where
-    B: BoardToMap<()>,
-{
-    pub fn search_tree(self) -> SearchingTree<'a, B::Map, B> {
-        let mut tree = SearchingTree::new(self.board);
-        tree.insert_root(self.index());
-        tree
-    }
-}
+use super::{FieldSearchResult, SearchingSet, SetWrapper};
 
 #[derive(Debug, Eq)]
 pub struct SearchingTree<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
@@ -208,6 +196,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingTree<'
     // perform_dfs
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum SearchMode {
     NewFieldsOnly,
     NoCycles,
@@ -303,8 +292,8 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Path<'a, M, B> 
         }
     }
 
-    pub fn iter_subpaths(&self) -> SubpathIter<'a, M, B> {
-        SubpathIter {
+    pub fn iter_subpaths(&self) -> IterSubpaths<'a, M, B> {
+        IterSubpaths {
             current: Some(*self),
         }
     }
@@ -346,12 +335,12 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Clone for Path<
 impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Copy for Path<'a, M, B> {}
 
 #[derive(Debug, Clone)]
-pub struct SubpathIter<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
+pub struct IterSubpaths<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
     current: Option<Path<'a, M, B>>,
 }
 
 impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator
-    for SubpathIter<'a, M, B>
+    for IterSubpaths<'a, M, B>
 {
     type Item = Path<'a, M, B>;
 
@@ -368,13 +357,13 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator
 }
 
 impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> ExactSizeIterator
-    for SubpathIter<'a, M, B>
+    for IterSubpaths<'a, M, B>
 {
 }
 
 #[derive(Debug, Clone)]
 pub struct PointIter<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
-    inner: SubpathIter<'a, M, B>,
+    inner: IterSubpaths<'a, M, B>,
 }
 
 impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator for PointIter<'a, M, B> {
@@ -391,11 +380,12 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator for Po
 
 #[cfg(test)]
 mod test {
-    use crate::board::{
-        directions::{BinaryDirection, GridDiagDirection},
-        matrix_board::*,
-        structures::{OffsetStructure, WrappedOffsetStructure},
-        vec_board::*,
+    use crate::{
+        concrete_boards::{matrix_board::*, vec_board::*},
+        structures::{
+            directions::{BinaryDirection, GridDiagDirection},
+            OffsetStructure, WrappedOffsetStructure,
+        },
         BoardToMap,
     };
 

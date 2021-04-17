@@ -1,15 +1,13 @@
-use super::{
-    directions::DirectionOffset,
-    directions::Offset,
-    directions::OffsetableIndex,
-    search::{HashIndexMap, SearchingSet},
-    search_tree::SearchingTree,
-    BoardToMap, *,
+use crate::{
+    search::{HashIndexMap, SearchingSet, SearchingTree},
+    structures::directions::{DirectionOffset, Offset, OffsetableIndex},
+    Board, BoardIdxType, BoardIndexable, BoardMut, BoardToMap, Field,
 };
 
 use std::{
+    cmp::Ordering,
     collections::VecDeque,
-    iter,
+    iter, mem,
     ops::{Add, Index, IndexMut},
 };
 
