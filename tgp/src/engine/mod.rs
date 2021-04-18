@@ -15,7 +15,7 @@ const INTERNAL_ERROR: &'static str = "Internal error - invalid state";
 
 enum InternalState<T: GameData> {
     PEffect(Box<dyn Effect<T>>),
-    PDecision(Vec<Box<dyn Decision<T>>>),
+    PDecision(Box<dyn Decision<T>>, Vec<Box<dyn Decision<T>>>),
     Finished,
     Invalid,
 }
@@ -44,7 +44,7 @@ impl<T: GameData + Debug> Debug for Engine<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let state_str = match self.state {
             InternalState::PEffect(_) => "PendingEffect",
-            InternalState::PDecision(_) => "PendingDecision",
+            InternalState::PDecision(_, _) => "PendingDecision",
             InternalState::Finished => "Finished",
             InternalState::Invalid => "INVALID",
         };
@@ -85,7 +85,7 @@ impl<T: GameData> Engine<T> {
                     "Illegal player for decision: {:?}",
                     decision.player()
                 );
-                InternalState::PDecision(vec![decision])
+                InternalState::PDecision(decision, Vec::new())
             }
             None => InternalState::Finished,
         }
@@ -101,14 +101,18 @@ impl<T: GameData> Engine<T> {
 
     fn decision_stack(&mut self) -> &mut Vec<Box<dyn Decision<T>>> {
         match &mut self.state {
-            InternalState::PDecision(stack) => stack,
+            InternalState::PDecision(_, stack) => stack,
             _ => panic!(INTERNAL_ERROR),
         }
     }
 
     fn decision(&self) -> &dyn Decision<T> {
         match &self.state {
-            InternalState::PDecision(stack) => stack.last().expect(INTERNAL_ERROR).as_ref(),
+            InternalState::PDecision(bottom, stack) => match stack.last() {
+                Some(decision) => decision,
+                None => bottom,
+            }
+            .as_ref(),
             _ => panic!(INTERNAL_ERROR),
         }
     }

@@ -24,7 +24,7 @@ impl<T: GameData> AbstractEngine for Engine<T> {
             InternalState::PEffect(_) => {
                 AbstractState::PendingEffect(AbstractPendingEffect { state: self })
             }
-            InternalState::PDecision(_) => {
+            InternalState::PDecision(_, _) => {
                 AbstractState::PendingDecision(AbstractPendingDecision { state: self })
             }
             InternalState::Finished => AbstractState::Finished(AbstractFinished {}),

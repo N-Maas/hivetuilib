@@ -24,7 +24,7 @@ impl<T: GameData> GameEngine for Engine<T> {
     fn pull(&mut self) -> GameState<'_, Self::Data> {
         match &self.state {
             InternalState::PEffect(_) => GameState::PendingEffect(PendingEffect { engine: self }),
-            InternalState::PDecision(_) => {
+            InternalState::PDecision(_, _) => {
                 GameState::PendingDecision(PendingDecision { engine: self })
             }
             InternalState::Finished => GameState::Finished(Finished { engine: self }),
