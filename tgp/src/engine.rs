@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, mem};
 
-use crate::tgp::*;
+use crate::{Decision, Effect, GameData};
 
 pub struct PendingEffect<'a> {
     state: &'a mut dyn PEffectState,
