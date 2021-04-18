@@ -122,11 +122,15 @@ impl<T: GameData> Engine<T> {
 
 impl<T: GameData> PEffectState for Engine<T> {
     fn next_effect(&mut self) -> Option<&mut dyn PEffectState> {
-        Self::take_effect(&mut self.state).apply(&mut self.data);
+        let next = Self::take_effect(&mut self.state).apply(&mut self.data);
 
-        // TODO: multiple effects
-        self.state = Self::fetch_decision(self.num_players, self.data());
-        None
+        if let Some(effect) = next {
+            self.state = InternalState::PEffect(effect);
+            Some(self)
+        } else {
+            self.state = Self::fetch_decision(self.num_players, self.data());
+            None
+        }
     }
 }
 

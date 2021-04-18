@@ -4,13 +4,13 @@
 /**
  * An effect changes the data of the game.
  */
-pub trait Effect<M> {
+pub trait Effect<T> {
     // TODO: multiple effects
-    fn apply(&self, data: &mut M);
+    fn apply(&self, data: &mut T) -> Option<Box<dyn Effect<T>>>;
 }
 
-impl<M, F: Fn(&mut M)> Effect<M> for F {
-    fn apply(&self, data: &mut M) {
+impl<T, F: Fn(&mut T) -> Option<Box<dyn Effect<T>>>> Effect<T> for F {
+    fn apply(&self, data: &mut T) -> Option<Box<dyn Effect<T>>> {
         self(data)
     }
 }
