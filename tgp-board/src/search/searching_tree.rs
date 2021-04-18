@@ -241,6 +241,10 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Path<'a, M, B> 
         self.length
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.length == 0
+    }
+
     pub fn searching_tree(&self) -> &'a SearchingTree<'a, M, B> {
         self.searching_tree
     }
@@ -300,7 +304,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Path<'a, M, B> 
 
     fn new(tree_index: usize, length: usize, searching_tree: &'a SearchingTree<'a, M, B>) -> Self {
         let result = Self {
-            tree_index: tree_index,
+            tree_index,
             length,
             searching_tree,
         };

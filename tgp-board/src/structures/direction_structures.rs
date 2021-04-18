@@ -1,4 +1,7 @@
-use std::marker::PhantomData;
+use std::{
+    fmt::{self, Debug},
+    marker::PhantomData,
+};
 
 use crate::trait_definitions::{Board, ContiguousBoard};
 
@@ -36,7 +39,7 @@ macro_rules! implNeighborhoodStructure {
     };
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
+#[derive(PartialEq, Eq, Clone, Copy, Default)]
 pub struct OffsetStructure<I: OffsetableIndex, D: DirectionOffset<I::Offset>> {
     _i: PhantomData<I>,
     _d: PhantomData<D>,
@@ -48,6 +51,12 @@ impl<I: OffsetableIndex, D: DirectionOffset<I::Offset>> OffsetStructure<I, D> {
             _i: PhantomData,
             _d: PhantomData,
         }
+    }
+}
+
+impl<I: OffsetableIndex, D: DirectionOffset<I::Offset>> Debug for OffsetStructure<I, D> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "OffsetStructure")
     }
 }
 
@@ -83,7 +92,7 @@ where
     implNeighborhoodStructure!();
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
+#[derive(PartialEq, Eq, Clone, Copy, Default)]
 pub struct WrappedOffsetStructure<I: OffsetableIndex + PartialOrd, D: DirectionOffset<I::Offset>> {
     _i: PhantomData<I>,
     _d: PhantomData<D>,
@@ -95,6 +104,14 @@ impl<I: OffsetableIndex + PartialOrd, D: DirectionOffset<I::Offset>> WrappedOffs
             _i: PhantomData,
             _d: PhantomData,
         }
+    }
+}
+
+impl<I: OffsetableIndex + PartialOrd, D: DirectionOffset<I::Offset>> Debug
+    for WrappedOffsetStructure<I, D>
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "WrappedOffsetStructure")
     }
 }
 

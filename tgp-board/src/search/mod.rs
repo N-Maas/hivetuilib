@@ -110,7 +110,7 @@ impl<M: IndexMap<Item = ()>> From<M> for SetWrapper<M> {
     }
 }
 
-// ----
+// ----- result type -----
 
 pub struct FieldSearchResult<I: BoardIdxType> {
     data: Vec<I>,
