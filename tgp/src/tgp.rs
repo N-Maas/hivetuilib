@@ -1,15 +1,18 @@
-use crate::{Decision, Effect};
+use crate::{Decision, Effect, GameData};
 
-pub struct VecDecision<T> {
+pub struct VecDecision<T: GameData> {
     options: Vec<Box<dyn Effect<T>>>,
     player: usize,
+    context: T::Context,
 }
 
-impl<T> VecDecision<T> {
-    pub fn new(player: usize) -> Self {
+// TODO: graceful context handling
+impl<T: GameData> VecDecision<T> {
+    pub fn new(player: usize, context: T::Context) -> Self {
         Self {
             options: Vec::new(),
             player,
+            context,
         }
     }
 
@@ -22,14 +25,13 @@ impl<T> VecDecision<T> {
         self
     }
 
-    // TODO: by value?
-    // pub fn select_option(&self, index: usize) -> Option<&Result<T>> {
-    //     self.options.get(index).map(|x| x.as_ref())
-    // }
+    pub fn context_mut(&mut self) -> &mut T::Context {
+        &mut self.context
+    }
 }
 
-impl<T> Decision<T> for VecDecision<T> {
-    fn select_option(mut self: Box<Self>, index: usize) -> Box<dyn Effect<T>> {
+impl<T: GameData> Decision<T> for VecDecision<T> {
+    fn select_option(mut self: Box<Self>, _data: &T, index: usize) -> Box<dyn Effect<T>> {
         self.options.swap_remove(index)
     }
 
@@ -39,5 +41,9 @@ impl<T> Decision<T> for VecDecision<T> {
 
     fn player(&self) -> usize {
         self.player
+    }
+
+    fn context(&self, _data: &T) -> &T::Context {
+        &self.context
     }
 }
