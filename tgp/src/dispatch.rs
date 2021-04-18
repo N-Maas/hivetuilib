@@ -2,9 +2,7 @@ use std::marker::PhantomData;
 
 use crate::Effect;
 
-/**
- * A dispatcher maps a state to a subcomponent (module) of itself.
- */
+/// A dispatcher maps a state to a subcomponent (module) of itself.
 pub trait Dispatcher<T, M>: Copy + 'static {
     fn dispatch<'a>(&self, data: &'a mut T) -> &'a mut M;
 }

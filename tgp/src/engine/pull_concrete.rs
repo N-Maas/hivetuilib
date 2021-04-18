@@ -1,10 +1,8 @@
 use crate::GameData;
 
-use super::{Engine, InternalState, PDecisionState, PEffectState};
+use super::{Engine, InternalState, PDecisionState, PEffectState, INTERNAL_ERROR};
 
-/**
- * Concrete engine trait which provides context for each decision.
- */
+/// Concrete engine trait which provides context for each decision.
 pub trait GameEngine {
     type Data: GameData;
 
@@ -76,6 +74,73 @@ impl<'a, T: GameData> PendingDecision<'a, T> {
 
     pub fn data(&self) -> &T {
         self.engine.data()
+    }
+
+    pub fn level_in_chain(&self) -> usize {
+        self.engine.level_in_chain()
+    }
+
+    pub fn is_follow_up_decision(&self) -> bool {
+        self.engine.level_in_chain() > 0
+    }
+
+    pub fn into_follow_up_decision(self) -> Option<FollowUpDecision<'a, T>> {
+        if self.is_follow_up_decision() {
+            Some(FollowUpDecision {
+                engine: self.engine,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct FollowUpDecision<'a, T: GameData> {
+    engine: &'a mut Engine<T>,
+}
+
+impl<'a, T: GameData> FollowUpDecision<'a, T> {
+    pub fn select_option(self, index: usize) {
+        self.engine.select_option(index)
+    }
+
+    pub fn option_count(&self) -> usize {
+        self.engine.option_count()
+    }
+
+    pub fn player(&self) -> usize {
+        self.engine.player()
+    }
+
+    pub fn context(&self) -> &T::Context {
+        self.engine.context()
+    }
+
+    pub fn data(&self) -> &T {
+        self.engine.data()
+    }
+
+    pub fn level_in_chain(&self) -> usize {
+        self.engine.level_in_chain()
+    }
+
+    /// Retracts from the current subdecision.
+    pub fn retract(self) {
+        assert!(self.engine.retract_n(1), INTERNAL_ERROR)
+    }
+
+    /// Retracts from n subdecisions and returns whether the retraction was successful.
+    ///
+    /// This is the case if and only if n <= #{pending decisions}.
+    /// Otherwise, it has no effect.
+    pub fn retract_n(self, n: usize) -> bool {
+        self.engine.retract_n(n)
+    }
+
+    /// Retracts from all subdecisions until the root decision is reached.
+    pub fn retract_all(self) {
+        self.engine.retract_all()
     }
 }
 

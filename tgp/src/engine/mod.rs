@@ -72,8 +72,11 @@ trait PDecisionState {
 
     fn player(&self) -> usize;
 
-    // TODO: transition-based API?
-    // fn select_option(&mut self, index: usize) -> &mut dyn PEffectState;
+    fn level_in_chain(&self) -> usize;
+
+    fn retract_n(&mut self, n: usize) -> bool;
+
+    fn retract_all(&mut self);
 }
 
 impl<T: GameData> Engine<T> {
@@ -99,7 +102,14 @@ impl<T: GameData> Engine<T> {
         }
     }
 
-    fn decision_stack(&mut self) -> &mut Vec<Box<dyn Decision<T>>> {
+    fn decision_stack(&self) -> &Vec<Box<dyn Decision<T>>> {
+        match &self.state {
+            InternalState::PDecision(_, stack) => stack,
+            _ => panic!(INTERNAL_ERROR),
+        }
+    }
+
+    fn decision_stack_mut(&mut self) -> &mut Vec<Box<dyn Decision<T>>> {
         match &mut self.state {
             InternalState::PDecision(_, stack) => stack,
             _ => panic!(INTERNAL_ERROR),
@@ -143,7 +153,7 @@ impl<T: GameData> PDecisionState for Engine<T> {
                 self.state = InternalState::PEffect(effect);
             }
             Outcome::FollowUp(decision) => {
-                self.decision_stack().push(decision);
+                self.decision_stack_mut().push(decision);
             }
         }
     }
@@ -154,5 +164,23 @@ impl<T: GameData> PDecisionState for Engine<T> {
 
     fn player(&self) -> usize {
         self.decision().player()
+    }
+
+    fn level_in_chain(&self) -> usize {
+        self.decision_stack().len()
+    }
+
+    fn retract_n(&mut self, n: usize) -> bool {
+        let len = self.decision_stack().len();
+        if n <= len {
+            self.decision_stack_mut().truncate(len - n);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn retract_all(&mut self) {
+        self.decision_stack_mut().clear()
     }
 }

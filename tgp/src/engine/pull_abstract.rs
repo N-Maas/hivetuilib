@@ -2,11 +2,9 @@ use std::fmt::Debug;
 
 use crate::GameData;
 
-use super::{Engine, InternalState, PDecisionState, PEffectState};
+use super::{Engine, InternalState, PDecisionState, PEffectState, INTERNAL_ERROR};
 
-/**
- * Abstracted engine trait (with erased type parameter).
- */
+/// Abstracted engine trait (with erased type parameter).
 pub trait AbstractEngine {
     fn pull_abstract(&mut self) -> AbstractState<'_>;
 }
@@ -72,11 +70,72 @@ impl<'a> AbstractPendingDecision<'a> {
     pub fn player(&self) -> usize {
         self.state.player()
     }
+
+    pub fn level_in_chain(&self) -> usize {
+        self.state.level_in_chain()
+    }
+
+    pub fn is_follow_up_decision(&self) -> bool {
+        self.state.level_in_chain() > 0
+    }
+
+    pub fn into_follow_up_decision(self) -> Option<AbstractFollowUpDecision<'a>> {
+        if self.is_follow_up_decision() {
+            Some(AbstractFollowUpDecision { state: self.state })
+        } else {
+            None
+        }
+    }
 }
 
 impl<'a> Debug for AbstractPendingDecision<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "AbstractPendingDecision")
+    }
+}
+
+pub struct AbstractFollowUpDecision<'a> {
+    // panics at wrong index
+    state: &'a mut dyn PDecisionState,
+}
+
+impl<'a> AbstractFollowUpDecision<'a> {
+    pub fn select_option(self, index: usize) {
+        self.state.select_option(index)
+    }
+
+    pub fn option_count(&self) -> usize {
+        self.state.option_count()
+    }
+
+    pub fn player(&self) -> usize {
+        self.state.player()
+    }
+
+    pub fn level_in_chain(&self) -> usize {
+        self.state.level_in_chain()
+    }
+
+    pub fn is_follow_up_decision(&self) -> bool {
+        self.state.level_in_chain() > 0
+    }
+
+    /// Retracts from the current subdecision.
+    pub fn retract(self) {
+        assert!(self.state.retract_n(1), INTERNAL_ERROR)
+    }
+
+    /// Retracts from n subdecisions and returns whether the retraction was successful.
+    ///
+    /// This is the case if and only if n <= #{pending decisions}.
+    /// Otherwise, it has no effect.
+    pub fn retract_n(self, n: usize) -> bool {
+        self.state.retract_n(n)
+    }
+
+    /// Retracts from all subdecisions until the root decision is reached.
+    pub fn retract_all(self) {
+        self.state.retract_all()
     }
 }
 
