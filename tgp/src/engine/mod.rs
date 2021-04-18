@@ -9,11 +9,13 @@ use std::{
     mem,
 };
 
-use crate::{Decision, Effect, GameData};
+use crate::{Decision, Effect, GameData, Outcome};
+
+const INTERNAL_ERROR: &'static str = "Internal error - invalid state";
 
 enum InternalState<T: GameData> {
     PEffect(Box<dyn Effect<T>>),
-    PDecision(Box<dyn Decision<T>>),
+    PDecision(Vec<Box<dyn Decision<T>>>),
     Finished,
     Invalid,
 }
@@ -77,13 +79,13 @@ trait PDecisionState {
 impl<T: GameData> Engine<T> {
     fn fetch_decision(num_players: usize, data: &T) -> InternalState<T> {
         match data.next_decision() {
-            Some(dec) => {
+            Some(decision) => {
                 assert!(
-                    dec.player() < num_players,
+                    decision.player() < num_players,
                     "Illegal player for decision: {:?}",
-                    dec.player()
+                    decision.player()
                 );
-                InternalState::PDecision(dec)
+                InternalState::PDecision(vec![decision])
             }
             None => InternalState::Finished,
         }
@@ -93,30 +95,26 @@ impl<T: GameData> Engine<T> {
         let state = mem::replace(state, InternalState::Invalid);
         match state {
             InternalState::PEffect(effect) => effect,
-            _ => panic!("Internal error - invalid state"),
+            _ => panic!(INTERNAL_ERROR),
         }
     }
 
-    fn take_decision(state: &mut InternalState<T>) -> Box<dyn Decision<T>> {
-        let state = mem::replace(state, InternalState::Invalid);
-        match state {
-            InternalState::PDecision(decision) => decision,
-            _ => panic!("Internal error - invalid state"),
+    fn decision_stack(&mut self) -> &mut Vec<Box<dyn Decision<T>>> {
+        match &mut self.state {
+            InternalState::PDecision(stack) => stack,
+            _ => panic!(INTERNAL_ERROR),
         }
     }
 
     fn decision(&self) -> &dyn Decision<T> {
         match &self.state {
-            InternalState::PDecision(dec) => dec.as_ref(),
-            _ => panic!("Internal error - invalid state"),
+            InternalState::PDecision(stack) => stack.last().expect(INTERNAL_ERROR).as_ref(),
+            _ => panic!(INTERNAL_ERROR),
         }
     }
 
     fn context(&self) -> &T::Context {
-        match &self.state {
-            InternalState::PDecision(dec) => dec.context(&self.data),
-            _ => panic!("Internal error - invalid state"),
-        }
+        self.decision().context(&self.data)
     }
 }
 
@@ -136,16 +134,14 @@ impl<T: GameData> PEffectState for Engine<T> {
 
 impl<T: GameData> PDecisionState for Engine<T> {
     fn select_option(&mut self, index: usize) {
-        assert!(
-            index < self.option_count(),
-            "Invalid option: {}. Only {} options available.",
-            index,
-            self.option_count()
-        );
-
-        let decision = Self::take_decision(&mut self.state);
-        let effect = decision.select_option(&self.data, index);
-        self.state = InternalState::PEffect(effect);
+        match self.decision().select_option(&self.data, index) {
+            Outcome::Effect(effect) => {
+                self.state = InternalState::PEffect(effect);
+            }
+            Outcome::FollowUp(decision) => {
+                self.decision_stack().push(decision);
+            }
+        }
     }
 
     fn option_count(&self) -> usize {
