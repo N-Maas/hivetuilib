@@ -4,7 +4,7 @@ use crate::trait_definitions::BoardIdxType;
 
 // TODO: move type parameter to associated type?
 pub trait DirectionOffset<O>: Copy + Eq {
-    fn get_offset(&self) -> O;
+    fn offset(&self) -> O;
 }
 
 pub trait DirectionReversable: Copy + Eq {
@@ -64,7 +64,7 @@ pub enum BinaryDirection {
 }
 
 impl DirectionOffset<Offset> for BinaryDirection {
-    fn get_offset(&self) -> Offset {
+    fn offset(&self) -> Offset {
         match self {
             BinaryDirection::Forward => Offset(1),
             BinaryDirection::Backward => Offset(-1),
@@ -104,7 +104,7 @@ macro_rules! impl2DDirection {
         }
 
         impl DirectionOffset<(Offset, Offset)> for $name {
-            fn get_offset(&self) -> (Offset, Offset) {
+            fn offset(&self) -> (Offset, Offset) {
                 match self {
                     $($name::$dir => (Offset($x), Offset($y)),)+
                 }

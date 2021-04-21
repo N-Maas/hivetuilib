@@ -163,7 +163,7 @@ where
     type Output = Option<Self>;
 
     fn add(self, rhs: D) -> Self::Output {
-        Self::from_offset(self.apply_offset(rhs.get_offset()))
+        Self::from_offset(self.apply_offset(rhs.offset()))
     }
 }
 

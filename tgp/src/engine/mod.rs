@@ -10,7 +10,7 @@ use std::{
 
 use crate::{Decision, Effect, GameData, Outcome};
 
-const INTERNAL_ERROR: &'static str = "Internal error - invalid state";
+const INTERNAL_ERROR: &str = "Internal error - invalid state";
 
 enum InternalState<T: GameData> {
     PEffect(Box<dyn Effect<T>>),

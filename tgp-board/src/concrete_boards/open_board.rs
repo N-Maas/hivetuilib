@@ -288,7 +288,7 @@ where
     type Output = Self;
 
     fn add(self, rhs: D) -> Self {
-        Self::from_offset(self.apply_offset(rhs.get_offset())).unwrap()
+        Self::from_offset(self.apply_offset(rhs.offset())).unwrap()
     }
 }
 

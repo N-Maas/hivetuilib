@@ -68,8 +68,7 @@ where
     type Direction = D;
 
     fn next(&self, board: &B, index: B::Index, direction: D) -> Option<B::Index> {
-        B::Index::from_offset(index.apply_offset(direction.get_offset()))
-            .filter(|i| board.contains(*i))
+        B::Index::from_offset(index.apply_offset(direction.offset())).filter(|i| board.contains(*i))
     }
 }
 
@@ -123,7 +122,7 @@ where
     type Direction = D;
 
     fn next(&self, board: &B, index: B::Index, direction: D) -> Option<B::Index> {
-        Some(board.wrapped(index.apply_offset(direction.get_offset())))
+        Some(board.wrapped(index.apply_offset(direction.offset())))
     }
 }
 
