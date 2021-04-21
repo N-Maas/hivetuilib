@@ -68,7 +68,7 @@ impl<'a, T: GameData> PendingDecision<'a, T> {
         self.engine.player()
     }
 
-    pub fn context(&self) -> &T::Context {
+    pub fn context(&self) -> T::Context {
         self.engine.context()
     }
 
@@ -113,7 +113,7 @@ impl<'a, T: GameData> FollowUpDecision<'a, T> {
         self.engine.player()
     }
 
-    pub fn context(&self) -> &T::Context {
+    pub fn context(&self) -> T::Context {
         self.engine.context()
     }
 

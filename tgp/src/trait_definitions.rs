@@ -47,7 +47,8 @@ pub trait Decision<T: GameData> {
 
     fn player(&self) -> usize;
 
-    fn context<'a>(&'a self, data: &'a T) -> &'a T::Context;
+    // seems like the best/most simple we can do in absence of GATs
+    fn context(&self, data: &T) -> T::Context;
 }
 
 /// Interface between the data and the GameEngine.

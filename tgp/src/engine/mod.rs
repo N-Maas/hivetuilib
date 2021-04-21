@@ -126,7 +126,7 @@ impl<T: GameData> Engine<T> {
         }
     }
 
-    fn context(&self) -> &T::Context {
+    fn context(&self) -> T::Context {
         self.decision().context(&self.data)
     }
 }
