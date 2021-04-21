@@ -1,15 +1,31 @@
 use crate::{Decision, Effect, GameData, Outcome};
 
-pub struct VecDecision<T: GameData> {
+/// A simple representation of a decision consisting of the player,
+/// a list of effects and a cloneable context.
+pub struct FlatDecision<T: GameData>
+where
+    T::Context: Clone,
+{
     options: Vec<Box<dyn Fn(&T) -> Outcome<T>>>,
     player: usize,
     context: T::Context,
 }
 
 // TODO: graceful context handling
-// TODO: support follow-up decisions
-impl<T: GameData> VecDecision<T> {
-    pub fn new(player: usize, context: T::Context) -> Self {
+impl<T: GameData> FlatDecision<T>
+where
+    T::Context: Clone + Default,
+{
+    pub fn new(player: usize) -> Self {
+        Self::with_context(player, Default::default())
+    }
+}
+
+impl<T: GameData> FlatDecision<T>
+where
+    T::Context: Clone,
+{
+    pub fn with_context(player: usize, context: T::Context) -> Self {
         Self {
             options: Vec::new(),
             player,
@@ -43,37 +59,48 @@ impl<T: GameData> VecDecision<T> {
         }))
     }
 
+    pub fn len(&self) -> usize {
+        self.options.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.options.is_empty()
+    }
+
+    // TODO: not a good name - but collides with decision trait..
+    pub fn context_ref(&self) -> &T::Context {
+        &self.context
+    }
+
     pub fn context_mut(&mut self) -> &mut T::Context {
         &mut self.context
     }
 }
 
-impl<T: GameData> Decision<T> for VecDecision<T> {
+impl<T: GameData> Decision<T> for FlatDecision<T>
+where
+    T::Context: Clone,
+{
     fn select_option(&self, data: &T, index: usize) -> Outcome<T> {
-        assert!(
-            index < self.option_count(),
-            "Invalid option: {}. Only {} options available.",
-            index,
-            self.option_count()
-        );
-
-        let outcome_fn = self.options.get(index).expect(&format!(
-            "Invalid option: {}. Only {} options available.",
-            index,
-            self.option_count()
-        ));
+        let outcome_fn = self.options.get(index).unwrap_or_else(|| {
+            panic!(
+                "Invalid option: {}. Only {} options available.",
+                index,
+                self.option_count()
+            )
+        });
         outcome_fn(data)
     }
 
     fn option_count(&self) -> usize {
-        self.options.len()
+        self.len()
     }
 
     fn player(&self) -> usize {
         self.player
     }
 
-    fn context(&self, _data: &T) -> &T::Context {
-        &self.context
+    fn context(&self, _data: &T) -> T::Context {
+        self.context.clone()
     }
 }
