@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::{Decision, Effect, GameData, Outcome};
 
 /// A simple representation of a decision consisting of the player,
@@ -7,8 +9,23 @@ where
     T::Context: Clone,
 {
     options: Vec<Box<dyn Fn(&T) -> Outcome<T>>>,
-    player: usize,
     context: T::Context,
+    player: usize,
+}
+
+impl<T: GameData> Debug for FlatDecision<T>
+where
+    T::Context: Clone + Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "FlatDecision {{ player: {:?}, context: {:?}, options.len(): {:?} }}",
+            self.player,
+            &self.context,
+            self.options.len()
+        )
+    }
 }
 
 // TODO: graceful context handling
@@ -28,8 +45,8 @@ where
     pub fn with_context(player: usize, context: T::Context) -> Self {
         Self {
             options: Vec::new(),
-            player,
             context,
+            player,
         }
     }
 

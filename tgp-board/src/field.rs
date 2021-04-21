@@ -63,8 +63,7 @@ impl<'a, B: Board> Copy for Field<'a, B> {}
 
 impl<B: Board> Debug for Field<'_, B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // TODO: make it pretty
-        f.write_fmt(format_args!("Field {{ index: {:?} }}", self.index))
+        write!(f, "Field {{ index: {:?} }}", self.index)
     }
 }
 
