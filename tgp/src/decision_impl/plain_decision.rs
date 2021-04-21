@@ -4,7 +4,7 @@ use crate::{Decision, Effect, GameData, Outcome};
 
 /// A simple representation of a decision consisting of the player,
 /// a list of effects and a cloneable context.
-pub struct FlatDecision<T: GameData>
+pub struct PlainDecision<T: GameData>
 where
     T::Context: Clone,
 {
@@ -13,7 +13,7 @@ where
     player: usize,
 }
 
-impl<T: GameData> Debug for FlatDecision<T>
+impl<T: GameData> Debug for PlainDecision<T>
 where
     T::Context: Clone + Debug,
 {
@@ -29,7 +29,7 @@ where
 }
 
 // TODO: graceful context handling
-impl<T: GameData> FlatDecision<T>
+impl<T: GameData> PlainDecision<T>
 where
     T::Context: Clone + Default,
 {
@@ -38,7 +38,7 @@ where
     }
 }
 
-impl<T: GameData> FlatDecision<T>
+impl<T: GameData> PlainDecision<T>
 where
     T::Context: Clone,
 {
@@ -94,7 +94,7 @@ where
     }
 }
 
-impl<T: GameData> Decision<T> for FlatDecision<T>
+impl<T: GameData> Decision<T> for PlainDecision<T>
 where
     T::Context: Clone,
 {

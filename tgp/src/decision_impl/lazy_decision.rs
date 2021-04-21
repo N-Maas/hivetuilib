@@ -2,9 +2,11 @@ use std::marker::PhantomData;
 
 use crate::{vec_context::VecContext, Decision, Effect, GameData, Outcome};
 
+// TODO: Debug
 /// Most powerful (and often, most performant) representation of a decision.
 /// This decision type consists of two mapping functions that lazily
 /// calculate an effect respective the context when required.
+#[derive(Clone)]
 pub struct LazyDecision<T: GameData, MapO, MapC, C>
 where
     MapO: MapToOutcome<T, C>,
@@ -72,10 +74,10 @@ where
 
 // ----- specialized implementation -----
 
-pub type MappedDecision<T, F, C, I> =
+pub type MappedDecision<F, T, C, I = ()> =
     LazyDecision<T, MapByEffect<F>, MapToVecContext, VecContext<C, I>>;
 
-pub type GeneralMappedDecision<T, F, C, I> =
+pub type GeneralMappedDecision<F, T, C, I = ()> =
     LazyDecision<T, MapByOutcome<F>, MapToVecContext, VecContext<C, I>>;
 
 pub trait MapToOutcome<T: GameData, C> {
