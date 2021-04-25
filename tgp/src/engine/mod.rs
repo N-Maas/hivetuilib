@@ -19,8 +19,19 @@ enum InternalState<T: GameData> {
     Invalid,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CloneError {
+    /// Cloning is not possible in pending effect state,
+    /// the state must be either pending decision or finished.
+    PendingEffect,
+    /// Cloning is not possible for a pending follow-up decision,
+    /// the state must be either a pending top-level decision or finished.
+    FollowUp,
+}
+
 pub struct Engine<T: GameData> {
     state: InternalState<T>,
+    // TODO: use mutable reference instead?
     data: T,
     num_players: usize,
 }
@@ -28,14 +39,34 @@ pub struct Engine<T: GameData> {
 impl<T: GameData> Engine<T> {
     pub fn new(num_players: usize, data: T) -> Self {
         Self {
-            state: Self::fetch_decision(num_players, &data),
+            state: Self::fetch_next_state(num_players, &data),
             data,
             num_players,
         }
     }
+}
 
-    pub fn data(&self) -> &T {
-        &self.data
+impl<T: GameData + Clone> Engine<T> {
+    pub fn try_clone(&self) -> Result<Self, CloneError> {
+        let state = match &self.state {
+            InternalState::PEffect(_) => {
+                return Err(CloneError::PendingEffect);
+            }
+            InternalState::PDecision(_, stack) => {
+                if stack.is_empty() {
+                    Self::fetch_next_state(self.num_players, &self.data)
+                } else {
+                    return Err(CloneError::FollowUp);
+                }
+            }
+            InternalState::Finished => InternalState::Finished,
+            InternalState::Invalid => panic!(INTERNAL_ERROR),
+        };
+        Ok(Self {
+            state,
+            data: self.data.clone(),
+            num_players: self.num_players,
+        })
     }
 }
 
@@ -79,7 +110,7 @@ trait PDecisionState {
 }
 
 impl<T: GameData> Engine<T> {
-    fn fetch_decision(num_players: usize, data: &T) -> InternalState<T> {
+    fn fetch_next_state(num_players: usize, data: &T) -> InternalState<T> {
         match data.next_decision() {
             Some(decision) => {
                 assert!(
@@ -139,7 +170,7 @@ impl<T: GameData> PEffectState for Engine<T> {
             self.state = InternalState::PEffect(effect);
             Some(self)
         } else {
-            self.state = Self::fetch_decision(self.num_players, self.data());
+            self.state = Self::fetch_next_state(self.num_players, self.data());
             None
         }
     }

@@ -7,6 +7,8 @@ pub trait GameEngine {
     type Data: GameData;
 
     fn pull(&mut self) -> GameState<'_, Self::Data>;
+
+    fn data(&self) -> &Self::Data;
 }
 
 #[derive(Debug)]
@@ -28,6 +30,10 @@ impl<T: GameData> GameEngine for Engine<T> {
             InternalState::Finished => GameState::Finished(Finished { engine: self }),
             InternalState::Invalid => panic!("Internal error - invalid state"),
         }
+    }
+
+    fn data(&self) -> &T {
+        &self.data
     }
 }
 
