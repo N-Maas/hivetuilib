@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::{Decision, Effect, GameData, Outcome};
+use crate::{new_effect, new_rev_effect, Decision, Effect, GameData, Outcome, RevEffect};
 
 /// A simple representation of a decision consisting of the player,
 /// a list of effects and a cloneable context.
@@ -55,16 +55,6 @@ where
         self
     }
 
-    pub fn add_effect<E>(&mut self, effect: E) -> &mut Self
-    where
-        E: Effect<T> + Clone + 'static,
-    {
-        self.add_option(Box::new(move |_| {
-            let new_effect = effect.clone();
-            Outcome::Effect(Box::new(new_effect))
-        }))
-    }
-
     pub fn add_follow_up<D, F>(&mut self, decision_fn: F) -> &mut Self
     where
         F: Fn(&T) -> D + 'static,
@@ -91,6 +81,37 @@ where
 
     pub fn context_mut(&mut self) -> &mut T::Context {
         &mut self.context
+    }
+}
+
+impl<T> PlainDecision<T>
+where
+    T: GameData<EffectType = dyn Effect<T>> + 'static,
+    T::Context: Clone,
+{
+    pub fn add_effect<A>(&mut self, apply: A) -> &mut Self
+    where
+        A: Fn(&mut T) -> Option<Box<dyn Effect<T>>> + Clone + 'static,
+    {
+        self.add_option(Box::new(move |_| {
+            Outcome::Effect(new_effect(apply.clone()))
+        }))
+    }
+}
+
+impl<T> PlainDecision<T>
+where
+    T: GameData<EffectType = dyn RevEffect<T>> + 'static,
+    T::Context: Clone,
+{
+    pub fn add_rev_effect<A, U>(&mut self, apply: A, undo: U) -> &mut Self
+    where
+        A: Fn(&mut T) -> Option<Box<dyn RevEffect<T>>> + Clone + 'static,
+        U: Fn(&mut T) + Clone + 'static,
+    {
+        self.add_option(Box::new(move |_| {
+            Outcome::Effect(new_rev_effect(apply.clone(), undo.clone()))
+        }))
     }
 }
 

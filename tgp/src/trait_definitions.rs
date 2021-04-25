@@ -1,25 +1,22 @@
 use std::fmt::Debug;
 
 // TODO: better lifetime?
-// TODO: reversible effect
+// TODO: chained effect
 
 /// An effect changes the data of the game.
-pub trait Effect<T> {
-    fn apply(&self, data: &mut T) -> Option<Box<dyn Effect<T>>>;
+pub trait Effect<T: GameData> {
+    /// Modifies the data. Can optionally return a new effect
+    /// which is applied after this one.
+    fn apply(&self, data: &mut T) -> Option<Box<T::EffectType>>;
 }
 
-impl<T, F> Effect<T> for F
-where
-    F: Fn(&mut T) -> Option<Box<dyn Effect<T>>>,
-{
-    fn apply(&self, data: &mut T) -> Option<Box<dyn Effect<T>>> {
-        self(data)
-    }
+pub trait RevEffect<T: GameData>: Effect<T> {
+    fn undo(&self, data: &mut T);
 }
 
 /// Outcome of a decision - either an effect or a follow-up decision.
 pub enum Outcome<T: GameData> {
-    Effect(Box<dyn Effect<T>>),
+    Effect(Box<T::EffectType>),
     FollowUp(Box<dyn Decision<T>>),
 }
 
@@ -52,9 +49,12 @@ pub trait Decision<T: GameData> {
 }
 
 /// Interface between the data and the GameEngine.
-pub trait GameData {
+pub trait GameData: Sized {
     /// Context that is added to each decision.
     type Context;
+    /// The type of used effects (in most cases, you want to use `dyn Effect<Self>`
+    /// for non-reversible or `dyn RevEffect<T>` for reversible effects).
+    type EffectType: Effect<Self> + 'static + ?Sized;
 
     fn next_decision(&self) -> Option<Box<dyn Decision<Self>>>;
 }

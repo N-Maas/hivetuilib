@@ -64,11 +64,11 @@ impl<C: Clone, I: Clone> VecContext<C, I> {
         self.data.is_empty()
     }
 
-    // pub(crate) fn data(&mut self) -> &mut Vec<C> {
-    //     &mut self.data
-    // }
+    pub fn data(&mut self) -> &mut Vec<C> {
+        &mut self.data
+    }
 
-    pub(crate) fn push(&mut self, el: C) {
+    pub fn push(&mut self, el: C) {
         self.data.push(el)
     }
 }

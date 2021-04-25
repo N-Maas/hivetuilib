@@ -1,6 +1,9 @@
 use std::fmt::Debug;
 
-use crate::{vec_context::VecContext, Decision, Effect, GameData, Outcome};
+use crate::{
+    new_effect, new_rev_effect, vec_context::VecContext, Decision, Effect, GameData, Outcome,
+    RevEffect,
+};
 
 /// Represents a decision with a player, a list of options
 /// and a corresponding `VecContext`.
@@ -62,19 +65,6 @@ where
         self
     }
 
-    pub fn add_effect<E>(&mut self, effect: E, context: C) -> &mut Self
-    where
-        E: Effect<T> + Clone + 'static,
-    {
-        self.add_option(
-            Box::new(move |_| {
-                let new_effect = effect.clone();
-                Outcome::Effect(Box::new(new_effect))
-            }),
-            context,
-        )
-    }
-
     pub fn add_follow_up<D, F>(&mut self, decision_fn: F, context: C) -> &mut Self
     where
         F: Fn(&T) -> D + 'static,
@@ -100,6 +90,39 @@ where
     // TODO: not a good name - but collides with decision trait..
     pub fn context_ref(&self) -> &VecContext<C, I> {
         &self.context
+    }
+}
+
+impl<T, C: Clone, I: Clone> VecDecision<T, C, I>
+where
+    T: GameData<EffectType = dyn Effect<T>> + 'static,
+    T::Context: From<VecContext<C, I>>,
+{
+    pub fn add_effect<A>(&mut self, apply: A, context: C) -> &mut Self
+    where
+        A: Fn(&mut T) -> Option<Box<dyn Effect<T>>> + Clone + 'static,
+    {
+        self.add_option(
+            Box::new(move |_| Outcome::Effect(new_effect(apply.clone()))),
+            context,
+        )
+    }
+}
+
+impl<T, C: Clone, I: Clone> VecDecision<T, C, I>
+where
+    T: GameData<EffectType = dyn RevEffect<T>> + 'static,
+    T::Context: From<VecContext<C, I>>,
+{
+    pub fn add_rev_effect<A, U>(&mut self, apply: A, undo: U, context: C) -> &mut Self
+    where
+        A: Fn(&mut T) -> Option<Box<dyn RevEffect<T>>> + Clone + 'static,
+        U: Fn(&mut T) + Clone + 'static,
+    {
+        self.add_option(
+            Box::new(move |_| Outcome::Effect(new_rev_effect(apply.clone(), undo.clone()))),
+            context,
+        )
     }
 }
 

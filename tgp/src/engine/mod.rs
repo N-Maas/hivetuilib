@@ -13,7 +13,7 @@ use crate::{Decision, Effect, GameData, Outcome};
 const INTERNAL_ERROR: &str = "Internal error - invalid state";
 
 enum InternalState<T: GameData> {
-    PEffect(Box<dyn Effect<T>>),
+    PEffect(Box<T::EffectType>),
     PDecision(Box<dyn Decision<T>>, Vec<Box<dyn Decision<T>>>),
     Finished,
     Invalid,
@@ -93,7 +93,7 @@ impl<T: GameData> Engine<T> {
         }
     }
 
-    fn take_effect(state: &mut InternalState<T>) -> Box<dyn Effect<T>> {
+    fn take_effect(state: &mut InternalState<T>) -> Box<T::EffectType> {
         let state = mem::replace(state, InternalState::Invalid);
         match state {
             InternalState::PEffect(effect) => effect,
