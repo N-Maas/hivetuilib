@@ -9,18 +9,11 @@ use std::{
     mem,
 };
 
-use crate::{Decision, Effect, GameData, Outcome};
+use crate::{Decision, Effect, GameData, Outcome, RevEffect};
 
-use self::logging::{EventListener, NotListening};
+use self::logging::EventLog;
 
 const INTERNAL_ERROR: &str = "Internal error - invalid state";
-
-enum InternalState<T: GameData> {
-    PEffect(Box<T::EffectType>),
-    PDecision(Box<dyn Decision<T>>, Vec<Box<dyn Decision<T>>>),
-    Finished,
-    Invalid,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CloneError {
@@ -32,6 +25,32 @@ pub enum CloneError {
     FollowUp,
 }
 
+pub trait EventListener<T: GameData> {
+    fn effect_applied(&mut self, effect: Box<T::EffectType>);
+
+    fn option_selected(&mut self, index: usize);
+
+    fn retracted_by_n(&mut self, n: usize);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NotListening {}
+
+impl<T: GameData> EventListener<T> for NotListening {
+    fn effect_applied(&mut self, _effect: Box<T::EffectType>) {}
+
+    fn option_selected(&mut self, _index: usize) {}
+
+    fn retracted_by_n(&mut self, _n: usize) {}
+}
+
+enum InternalState<T: GameData> {
+    PEffect(Box<T::EffectType>),
+    PDecision(Box<dyn Decision<T>>, Vec<Box<dyn Decision<T>>>),
+    Finished,
+    Invalid,
+}
+
 pub struct Engine<T: GameData, L: EventListener<T> = NotListening> {
     state: InternalState<T>,
     // TODO: use mutable reference instead?
@@ -40,12 +59,29 @@ pub struct Engine<T: GameData, L: EventListener<T> = NotListening> {
     num_players: usize,
 }
 
+pub type LoggingEngine<T> = Engine<T, EventLog<T>>;
+
 impl<T: GameData> Engine<T> {
     pub fn new(num_players: usize, data: T) -> Self {
+        Self::with_listener(num_players, data, NotListening {})
+    }
+}
+
+impl<T: GameData> Engine<T, EventLog<T>>
+where
+    T::EffectType: RevEffect<T>,
+{
+    pub fn new_logging(num_players: usize, data: T) -> Self {
+        Self::with_listener(num_players, data, EventLog::new())
+    }
+}
+
+impl<T: GameData, L: EventListener<T>> Engine<T, L> {
+    pub fn with_listener(num_players: usize, data: T, listener: L) -> Self {
         Self {
             state: Self::fetch_next_state(num_players, &data),
             data,
-            listener: NotListening {},
+            listener,
             num_players,
         }
     }
@@ -84,7 +120,7 @@ impl<T: GameData + Clone, L: EventListener<T>> Engine<T, L> {
         Ok(Engine {
             state,
             data: self.data.clone(),
-            listener: listener,
+            listener,
             num_players: self.num_players,
         })
     }
@@ -152,6 +188,17 @@ impl<T: GameData, L: EventListener<T>> Engine<T, L> {
         }
     }
 
+    fn select_and_apply_option(&mut self, index: usize) {
+        match self.decision().select_option(&self.data, index) {
+            Outcome::Effect(effect) => {
+                self.state = InternalState::PEffect(effect);
+            }
+            Outcome::FollowUp(decision) => {
+                self.decision_stack_mut().push(decision);
+            }
+        }
+    }
+
     fn decision_stack(&self) -> &Vec<Box<dyn Decision<T>>> {
         match &self.state {
             InternalState::PDecision(_, stack) => stack,
@@ -200,14 +247,7 @@ impl<T: GameData, L: EventListener<T>> PEffectState for Engine<T, L> {
 
 impl<T: GameData, L: EventListener<T>> PDecisionState for Engine<T, L> {
     fn select_option(&mut self, index: usize) {
-        match self.decision().select_option(&self.data, index) {
-            Outcome::Effect(effect) => {
-                self.state = InternalState::PEffect(effect);
-            }
-            Outcome::FollowUp(decision) => {
-                self.decision_stack_mut().push(decision);
-            }
-        }
+        self.select_and_apply_option(index);
         self.listener.option_selected(index);
     }
 
@@ -237,5 +277,19 @@ impl<T: GameData, L: EventListener<T>> PDecisionState for Engine<T, L> {
     fn retract_all(&mut self) {
         self.listener.retracted_by_n(self.decision_stack().len());
         self.decision_stack_mut().clear();
+    }
+}
+
+impl<T: GameData> Engine<T, EventLog<T>>
+where
+    T::EffectType: RevEffect<T>,
+{
+    pub fn undo_last_decision(&mut self) -> bool {
+        if self.listener.undo_last_decision(&mut self.data) {
+            self.state = Self::fetch_next_state(self.num_players, &self.data);
+            true
+        } else {
+            false
+        }
     }
 }

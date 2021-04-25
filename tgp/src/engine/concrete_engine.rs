@@ -1,27 +1,32 @@
-use crate::GameData;
+use crate::{GameData, RevEffect};
 
-use super::{Engine, InternalState, PDecisionState, PEffectState, INTERNAL_ERROR};
+use super::{
+    logging::EventLog, Engine, EventListener, InternalState, NotListening, PDecisionState,
+    PEffectState, INTERNAL_ERROR,
+};
 
 /// Concrete engine trait which provides context for each decision.
 pub trait GameEngine {
     type Data: GameData;
+    type Listener: EventListener<Self::Data>;
 
-    fn pull(&mut self) -> GameState<'_, Self::Data>;
+    fn pull(&mut self) -> GameState<'_, Self::Data, Self::Listener>;
 
     fn data(&self) -> &Self::Data;
 }
 
 #[derive(Debug)]
-pub enum GameState<'a, T: GameData> {
-    PendingEffect(PendingEffect<'a, T>),
-    PendingDecision(PendingDecision<'a, T>),
-    Finished(Finished<'a, T>),
+pub enum GameState<'a, T: GameData, L: EventListener<T> = NotListening> {
+    PendingEffect(PendingEffect<'a, T, L>),
+    PendingDecision(PendingDecision<'a, T, L>),
+    Finished(Finished<'a, T, L>),
 }
 
-impl<T: GameData> GameEngine for Engine<T> {
+impl<T: GameData, L: EventListener<T>> GameEngine for Engine<T, L> {
     type Data = T;
+    type Listener = L;
 
-    fn pull(&mut self) -> GameState<'_, Self::Data> {
+    fn pull(&mut self) -> GameState<'_, Self::Data, L> {
         match &self.state {
             InternalState::PEffect(_) => GameState::PendingEffect(PendingEffect { engine: self }),
             InternalState::PDecision(_, _) => {
@@ -38,11 +43,11 @@ impl<T: GameData> GameEngine for Engine<T> {
 }
 
 #[derive(Debug)]
-pub struct PendingEffect<'a, T: GameData> {
-    engine: &'a mut Engine<T>,
+pub struct PendingEffect<'a, T: GameData, L: EventListener<T> = NotListening> {
+    engine: &'a mut Engine<T, L>,
 }
 
-impl<'a, T: GameData> PendingEffect<'a, T> {
+impl<'a, T: GameData, L: EventListener<T>> PendingEffect<'a, T, L> {
     pub fn next_effect(self) {
         self.engine.next_effect();
     }
@@ -56,12 +61,21 @@ impl<'a, T: GameData> PendingEffect<'a, T> {
     }
 }
 
-#[derive(Debug)]
-pub struct PendingDecision<'a, T: GameData> {
-    engine: &'a mut Engine<T>,
+impl<T: GameData> PendingEffect<'_, T, EventLog<T>>
+where
+    T::EffectType: RevEffect<T>,
+{
+    pub fn undo_last_decision(&mut self) -> bool {
+        self.engine.undo_last_decision()
+    }
 }
 
-impl<'a, T: GameData> PendingDecision<'a, T> {
+#[derive(Debug)]
+pub struct PendingDecision<'a, T: GameData, L: EventListener<T> = NotListening> {
+    engine: &'a mut Engine<T, L>,
+}
+
+impl<'a, T: GameData, L: EventListener<T>> PendingDecision<'a, T, L> {
     pub fn select_option(self, index: usize) {
         self.engine.select_option(index)
     }
@@ -90,7 +104,7 @@ impl<'a, T: GameData> PendingDecision<'a, T> {
         self.engine.level_in_chain() > 0
     }
 
-    pub fn into_follow_up_decision(self) -> Option<FollowUpDecision<'a, T>> {
+    pub fn into_follow_up_decision(self) -> Option<FollowUpDecision<'a, T, L>> {
         if self.is_follow_up_decision() {
             Some(FollowUpDecision {
                 engine: self.engine,
@@ -101,12 +115,40 @@ impl<'a, T: GameData> PendingDecision<'a, T> {
     }
 }
 
-#[derive(Debug)]
-pub struct FollowUpDecision<'a, T: GameData> {
-    engine: &'a mut Engine<T>,
+impl<T: GameData> PendingDecision<'_, T, EventLog<T>>
+where
+    T::EffectType: RevEffect<T>,
+{
+    pub fn undo_last_decision(&mut self) -> bool {
+        self.engine.undo_last_decision()
+    }
+
+    pub fn redo_decision(self) -> bool {
+        if !self.engine.listener.redo_available() {
+            return false;
+        }
+
+        while let Some(index) = self.engine.listener.redo_step() {
+            self.engine.select_and_apply_option(index);
+
+            match self.engine.state {
+                InternalState::PEffect(_) => {
+                    break;
+                }
+                InternalState::PDecision(_, _) => {}
+                InternalState::Finished | InternalState::Invalid => panic!(INTERNAL_ERROR),
+            }
+        }
+        true
+    }
 }
 
-impl<'a, T: GameData> FollowUpDecision<'a, T> {
+#[derive(Debug)]
+pub struct FollowUpDecision<'a, T: GameData, L: EventListener<T>> {
+    engine: &'a mut Engine<T, L>,
+}
+
+impl<'a, T: GameData, L: EventListener<T>> FollowUpDecision<'a, T, L> {
     pub fn select_option(self, index: usize) {
         self.engine.select_option(index)
     }
@@ -150,14 +192,32 @@ impl<'a, T: GameData> FollowUpDecision<'a, T> {
     }
 }
 
+impl<T: GameData> FollowUpDecision<'_, T, EventLog<T>>
+where
+    T::EffectType: RevEffect<T>,
+{
+    pub fn undo_last_decision(&mut self) -> bool {
+        self.engine.undo_last_decision()
+    }
+}
+
 #[derive(Debug)]
-pub struct Finished<'a, T: GameData> {
-    engine: &'a mut Engine<T>,
+pub struct Finished<'a, T: GameData, L: EventListener<T>> {
+    engine: &'a mut Engine<T, L>,
     // TODO additional information?
 }
 
-impl<'a, T: GameData> Finished<'a, T> {
+impl<'a, T: GameData, L: EventListener<T>> Finished<'a, T, L> {
     pub fn data(&self) -> &T {
         self.engine.data()
+    }
+}
+
+impl<T: GameData> Finished<'_, T, EventLog<T>>
+where
+    T::EffectType: RevEffect<T>,
+{
+    pub fn undo_last_decision(&mut self) -> bool {
+        self.engine.undo_last_decision()
     }
 }
