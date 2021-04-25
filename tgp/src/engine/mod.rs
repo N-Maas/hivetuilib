@@ -1,5 +1,6 @@
 pub mod abstract_engine;
 mod concrete_engine;
+pub mod logging;
 
 pub use concrete_engine::*;
 
@@ -9,6 +10,8 @@ use std::{
 };
 
 use crate::{Decision, Effect, GameData, Outcome};
+
+use self::logging::{EventListener, NotListening};
 
 const INTERNAL_ERROR: &str = "Internal error - invalid state";
 
@@ -29,10 +32,11 @@ pub enum CloneError {
     FollowUp,
 }
 
-pub struct Engine<T: GameData> {
+pub struct Engine<T: GameData, L: EventListener<T> = NotListening> {
     state: InternalState<T>,
     // TODO: use mutable reference instead?
     data: T,
+    listener: L,
     num_players: usize,
 }
 
@@ -41,13 +45,28 @@ impl<T: GameData> Engine<T> {
         Self {
             state: Self::fetch_next_state(num_players, &data),
             data,
+            listener: NotListening {},
             num_players,
         }
     }
 }
 
-impl<T: GameData + Clone> Engine<T> {
-    pub fn try_clone(&self) -> Result<Self, CloneError> {
+impl<T: GameData + Clone, L: EventListener<T>> Engine<T, L> {
+    pub fn try_clone_data(&self) -> Result<Engine<T>, CloneError> {
+        self.try_clone_with_listener(NotListening {})
+    }
+
+    pub fn try_clone(&self) -> Result<Self, CloneError>
+    where
+        L: Clone,
+    {
+        self.try_clone_with_listener(self.listener.clone())
+    }
+
+    pub fn try_clone_with_listener<M: EventListener<T>>(
+        &self,
+        listener: M,
+    ) -> Result<Engine<T, M>, CloneError> {
         let state = match &self.state {
             InternalState::PEffect(_) => {
                 return Err(CloneError::PendingEffect);
@@ -62,15 +81,16 @@ impl<T: GameData + Clone> Engine<T> {
             InternalState::Finished => InternalState::Finished,
             InternalState::Invalid => panic!(INTERNAL_ERROR),
         };
-        Ok(Self {
+        Ok(Engine {
             state,
             data: self.data.clone(),
+            listener: listener,
             num_players: self.num_players,
         })
     }
 }
 
-impl<T: GameData + Debug> Debug for Engine<T> {
+impl<T: GameData + Debug, L: EventListener<T> + Debug> Debug for Engine<T, L> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let state_str = match self.state {
             InternalState::PEffect(_) => "PendingEffect",
@@ -80,8 +100,8 @@ impl<T: GameData + Debug> Debug for Engine<T> {
         };
         write!(
             f,
-            "Engine {{ state: {}, data: {:?}, num_players: {:?} }}",
-            state_str, &self.data, self.num_players
+            "Engine {{ state: {}, data: {:?}, listener: {:?}, num_players: {:?} }}",
+            state_str, &self.data, &self.listener, self.num_players
         )
     }
 }
@@ -109,7 +129,7 @@ trait PDecisionState {
     fn retract_all(&mut self);
 }
 
-impl<T: GameData> Engine<T> {
+impl<T: GameData, L: EventListener<T>> Engine<T, L> {
     fn fetch_next_state(num_players: usize, data: &T) -> InternalState<T> {
         match data.next_decision() {
             Some(decision) => {
@@ -162,21 +182,23 @@ impl<T: GameData> Engine<T> {
     }
 }
 
-impl<T: GameData> PEffectState for Engine<T> {
+impl<T: GameData, L: EventListener<T>> PEffectState for Engine<T, L> {
     fn next_effect(&mut self) -> Option<&mut dyn PEffectState> {
-        let next = Self::take_effect(&mut self.state).apply(&mut self.data);
+        let effect = Self::take_effect(&mut self.state);
+        let next = effect.apply(&mut self.data);
+        self.listener.effect_applied(effect);
 
         if let Some(effect) = next {
             self.state = InternalState::PEffect(effect);
             Some(self)
         } else {
-            self.state = Self::fetch_next_state(self.num_players, self.data());
+            self.state = Self::fetch_next_state(self.num_players, &self.data);
             None
         }
     }
 }
 
-impl<T: GameData> PDecisionState for Engine<T> {
+impl<T: GameData, L: EventListener<T>> PDecisionState for Engine<T, L> {
     fn select_option(&mut self, index: usize) {
         match self.decision().select_option(&self.data, index) {
             Outcome::Effect(effect) => {
@@ -186,6 +208,7 @@ impl<T: GameData> PDecisionState for Engine<T> {
                 self.decision_stack_mut().push(decision);
             }
         }
+        self.listener.option_selected(index);
     }
 
     fn option_count(&self) -> usize {
@@ -204,6 +227,7 @@ impl<T: GameData> PDecisionState for Engine<T> {
         let len = self.decision_stack().len();
         if n <= len {
             self.decision_stack_mut().truncate(len - n);
+            self.listener.retracted_by_n(n);
             true
         } else {
             false
@@ -211,6 +235,7 @@ impl<T: GameData> PDecisionState for Engine<T> {
     }
 
     fn retract_all(&mut self) {
-        self.decision_stack_mut().clear()
+        self.listener.retracted_by_n(self.decision_stack().len());
+        self.decision_stack_mut().clear();
     }
 }
