@@ -33,13 +33,25 @@ impl<T: GameData> Debug for Event<T> {
 // TODO: some verification? E.g. player, hash?
 // TODO: safe point you can reset to (via generational indizes)?
 // TODO: snapshots (requires clone) - lift RevEffect requirement?
-#[derive(Debug)]
 pub struct EventLog<T: GameData>
 where
     T::EffectType: RevEffect<T>,
 {
     log: Vec<Event<T>>,
     redo_stack: Vec<usize>,
+}
+
+impl<T: GameData> Debug for EventLog<T>
+where
+    T::EffectType: RevEffect<T>,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "EventLog: {{log: {:?}, redo_stack: {:?}}}",
+            &self.log, &self.redo_stack
+        )
+    }
 }
 
 impl<T: GameData> Default for EventLog<T>
@@ -62,19 +74,37 @@ where
         }
     }
 
+    pub fn redo_effect(&mut self, effect: Box<T::EffectType>) {
+        self.log.push(Event::Effect(effect));
+    }
+
     // TODO: correct behavior when in subdecision state?
     pub fn undo_last_decision(&mut self, data: &mut T) -> bool {
-        self.pop_subdecision();
-        if self.log.is_empty() {
-            return false;
+        // initialize with sentinel value to avoid edge case
+        let mut current_event = Event::Decision(0);
+        // pop subdecision
+        while let Event::Decision(_) = current_event {
+            if let Some(event) = self.log.pop() {
+                current_event = event;
+            } else {
+                return false;
+            }
         }
-        while let Some(Event::Effect(effect)) = self.log.pop() {
+        // undo effects
+        while let Event::Effect(effect) = current_event {
+            current_event = self.log.pop().expect("Internal error: Inconsistent log.");
             effect.undo(data);
         }
-        while let Some(&Event::Decision(val)) = self.log.last() {
-            self.log.pop();
-            self.redo_stack.push(val);
+        // push decision to redo stack
+        while let Event::Decision(index) = current_event {
+            self.redo_stack.push(index);
+            if let Some(event) = self.log.pop() {
+                current_event = event;
+            } else {
+                return true;
+            }
         }
+        self.log.push(current_event);
         true
     }
 
@@ -88,12 +118,6 @@ where
             self.log.push(Event::Decision(index));
             index
         })
-    }
-
-    fn pop_subdecision(&mut self) {
-        while let Some(Event::Decision(_)) = self.log.last() {
-            self.log.pop();
-        }
     }
 }
 

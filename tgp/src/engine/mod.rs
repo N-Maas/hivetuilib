@@ -78,12 +78,14 @@ where
 
 impl<T: GameData, L: EventListener<T>> Engine<T, L> {
     pub fn with_listener(num_players: usize, data: T, listener: L) -> Self {
-        Self {
-            state: Self::fetch_next_state(num_players, &data),
+        let mut result = Self {
+            state: InternalState::Invalid,
             data,
             listener,
             num_players,
-        }
+        };
+        result.state = result.fetch_next_state();
+        result
     }
 }
 
@@ -109,7 +111,7 @@ impl<T: GameData + Clone, L: EventListener<T>> Engine<T, L> {
             }
             InternalState::PDecision(_, stack) => {
                 if stack.is_empty() {
-                    Self::fetch_next_state(self.num_players, &self.data)
+                    self.fetch_next_state()
                 } else {
                     return Err(CloneError::FollowUp);
                 }
@@ -166,11 +168,11 @@ trait PDecisionState {
 }
 
 impl<T: GameData, L: EventListener<T>> Engine<T, L> {
-    fn fetch_next_state(num_players: usize, data: &T) -> InternalState<T> {
-        match data.next_decision() {
+    fn fetch_next_state(&self) -> InternalState<T> {
+        match self.data.next_decision() {
             Some(decision) => {
                 assert!(
-                    decision.player() < num_players,
+                    decision.player() < self.num_players,
                     "Illegal player for decision: {:?}",
                     decision.player()
                 );
@@ -180,8 +182,8 @@ impl<T: GameData, L: EventListener<T>> Engine<T, L> {
         }
     }
 
-    fn take_effect(state: &mut InternalState<T>) -> Box<T::EffectType> {
-        let state = mem::replace(state, InternalState::Invalid);
+    fn take_effect(&mut self) -> Box<T::EffectType> {
+        let state = mem::replace(&mut self.state, InternalState::Invalid);
         match state {
             InternalState::PEffect(effect) => effect,
             _ => panic!(INTERNAL_ERROR),
@@ -231,7 +233,7 @@ impl<T: GameData, L: EventListener<T>> Engine<T, L> {
 
 impl<T: GameData, L: EventListener<T>> PEffectState for Engine<T, L> {
     fn next_effect(&mut self) -> Option<&mut dyn PEffectState> {
-        let effect = Self::take_effect(&mut self.state);
+        let effect = self.take_effect();
         let next = effect.apply(&mut self.data);
         self.listener.effect_applied(effect);
 
@@ -239,7 +241,7 @@ impl<T: GameData, L: EventListener<T>> PEffectState for Engine<T, L> {
             self.state = InternalState::PEffect(effect);
             Some(self)
         } else {
-            self.state = Self::fetch_next_state(self.num_players, &self.data);
+            self.state = self.fetch_next_state();
             None
         }
     }
@@ -286,7 +288,7 @@ where
 {
     pub fn undo_last_decision(&mut self) -> bool {
         if self.listener.undo_last_decision(&mut self.data) {
-            self.state = Self::fetch_next_state(self.num_players, &self.data);
+            self.state = self.fetch_next_state();
             true
         } else {
             false

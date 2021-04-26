@@ -1,4 +1,4 @@
-use crate::{GameData, RevEffect};
+use crate::{trait_definitions::Effect, GameData, RevEffect};
 
 use super::{
     logging::EventLog, Engine, EventListener, InternalState, NotListening, PDecisionState,
@@ -128,10 +128,11 @@ where
             return false;
         }
 
-        while let Some(index) = self.engine.listener.redo_step() {
+        loop {
+            let index = self.engine.listener.redo_step().expect(INTERNAL_ERROR);
             self.engine.select_and_apply_option(index);
 
-            match self.engine.state {
+            match &mut self.engine.state {
                 InternalState::PEffect(_) => {
                     break;
                 }
@@ -139,6 +140,12 @@ where
                 InternalState::Finished | InternalState::Invalid => panic!(INTERNAL_ERROR),
             }
         }
+        let mut effect = Some(self.engine.take_effect());
+        while let Some(next) = effect {
+            effect = next.apply(&mut self.engine.data);
+            self.engine.listener.redo_effect(next);
+        }
+        self.engine.state = self.engine.fetch_next_state();
         true
     }
 }
