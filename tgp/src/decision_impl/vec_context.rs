@@ -73,9 +73,9 @@ impl<C: Clone, I: Clone> VecContext<C, I> {
     }
 }
 
-impl<C: Clone, I: Clone> Into<Vec<C>> for VecContext<C, I> {
-    fn into(self) -> Vec<C> {
-        self.data
+impl<C: Clone, I: Clone> From<VecContext<C, I>> for Vec<C> {
+    fn from(vc: VecContext<C, I>) -> Self {
+        vc.data
     }
 }
 

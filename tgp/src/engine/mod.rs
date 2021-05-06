@@ -117,7 +117,7 @@ impl<T: GameData + Clone, L: EventListener<T>> Engine<T, L> {
                 }
             }
             InternalState::Finished => InternalState::Finished,
-            InternalState::Invalid => panic!(INTERNAL_ERROR),
+            InternalState::Invalid => panic!("{}", INTERNAL_ERROR),
         };
         Ok(Engine {
             state,
@@ -186,7 +186,7 @@ impl<T: GameData, L: EventListener<T>> Engine<T, L> {
         let state = mem::replace(&mut self.state, InternalState::Invalid);
         match state {
             InternalState::PEffect(effect) => effect,
-            _ => panic!(INTERNAL_ERROR),
+            _ => panic!("{}", INTERNAL_ERROR),
         }
     }
 
@@ -204,14 +204,14 @@ impl<T: GameData, L: EventListener<T>> Engine<T, L> {
     fn decision_stack(&self) -> &Vec<Box<dyn Decision<T>>> {
         match &self.state {
             InternalState::PDecision(_, stack) => stack,
-            _ => panic!(INTERNAL_ERROR),
+            _ => panic!("{}", INTERNAL_ERROR),
         }
     }
 
     fn decision_stack_mut(&mut self) -> &mut Vec<Box<dyn Decision<T>>> {
         match &mut self.state {
             InternalState::PDecision(_, stack) => stack,
-            _ => panic!(INTERNAL_ERROR),
+            _ => panic!("{}", INTERNAL_ERROR),
         }
     }
 
@@ -222,7 +222,7 @@ impl<T: GameData, L: EventListener<T>> Engine<T, L> {
                 None => bottom,
             }
             .as_ref(),
-            _ => panic!(INTERNAL_ERROR),
+            _ => panic!("{}", INTERNAL_ERROR),
         }
     }
 

@@ -174,9 +174,9 @@ impl PartialOrd for Index2D {
     fn partial_cmp(&self, other: &Index2D) -> Option<Ordering> {
         if self.x == other.x && self.y == other.y {
             Some(Ordering::Equal)
-        } else if self.x <= other.y && self.y <= other.y {
+        } else if self.x <= other.x && self.y <= other.y {
             Some(Ordering::Less)
-        } else if self.x >= other.y && self.y >= other.y {
+        } else if self.x >= other.x && self.y >= other.y {
             Some(Ordering::Greater)
         } else {
             None

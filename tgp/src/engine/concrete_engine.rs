@@ -137,7 +137,7 @@ where
                     break;
                 }
                 InternalState::PDecision(_, _) => {}
-                InternalState::Finished | InternalState::Invalid => panic!(INTERNAL_ERROR),
+                InternalState::Finished | InternalState::Invalid => panic!("{}", INTERNAL_ERROR),
             }
         }
         let mut effect = Some(self.engine.take_effect());
@@ -182,7 +182,7 @@ impl<'a, T: GameData, L: EventListener<T>> FollowUpDecision<'a, T, L> {
 
     /// Retracts from the current subdecision.
     pub fn retract(self) {
-        assert!(self.engine.retract_n(1), INTERNAL_ERROR)
+        assert!(self.engine.retract_n(1), "{}", INTERNAL_ERROR)
     }
 
     /// Retracts from n subdecisions and returns whether the retraction was successful.

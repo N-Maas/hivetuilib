@@ -122,7 +122,7 @@ impl<'a> AbstractFollowUpDecision<'a> {
 
     /// Retracts from the current subdecision.
     pub fn retract(self) {
-        assert!(self.state.retract_n(1), INTERNAL_ERROR)
+        assert!(self.state.retract_n(1), "{}", INTERNAL_ERROR)
     }
 
     /// Retracts from n subdecisions and returns whether the retraction was successful.
