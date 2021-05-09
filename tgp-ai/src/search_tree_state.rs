@@ -5,14 +5,14 @@ use tgp::{
     GameData, RevEffect,
 };
 
-use crate::{DecIndex, IndexType, RatingType, INTERNAL_ERROR};
+use crate::{IndexType, RatingType, INTERNAL_ERROR};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct TreeIndex(usize, usize);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct TreeEntry {
-    pub dec_index: DecIndex,
+    pub dec_index: IndexType,
     pub rating: RatingType,
     pub num_children: IndexType,
 }
@@ -39,7 +39,12 @@ impl SearchTreeState {
         self.next_level = Some(Vec::new());
     }
 
-    pub fn push_child(&mut self, leaf: Option<TreeIndex>, dec_index: DecIndex, rating: RatingType) {
+    pub fn push_child(
+        &mut self,
+        leaf: Option<TreeIndex>,
+        dec_index: IndexType,
+        rating: RatingType,
+    ) {
         self.next_level
             .as_mut()
             .expect(INTERNAL_ERROR)

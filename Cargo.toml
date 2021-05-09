@@ -3,4 +3,5 @@
 members = [
     "tgp",
     "tgp-board",
+    "tgp-ai"
 ]

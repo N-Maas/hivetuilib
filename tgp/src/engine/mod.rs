@@ -87,6 +87,14 @@ impl<T: GameData, L: EventListener<T>> Engine<T, L> {
         result.state = result.fetch_next_state();
         result
     }
+
+    pub fn is_finished(&self) -> bool {
+        match self.state {
+            InternalState::Finished => true,
+            InternalState::Invalid => panic!("{}", INTERNAL_ERROR),
+            _ => false,
+        }
+    }
 }
 
 impl<T: GameData + Clone, L: EventListener<T>> Engine<T, L> {

@@ -3,7 +3,7 @@ use tgp::{
     GameData, RevEffect,
 };
 
-use crate::{DecIndex, INTERNAL_ERROR};
+use crate::{IndexType, INTERNAL_ERROR};
 
 pub(crate) struct EngineStepper<T: GameData>
 where
@@ -20,7 +20,7 @@ where
         Self { engine }
     }
 
-    pub fn forward_step(&mut self, index: DecIndex) {
+    pub fn forward_step(&mut self, index: IndexType) {
         todo!()
     }
 

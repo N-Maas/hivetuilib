@@ -5,6 +5,7 @@ use super::{
     PEffectState, INTERNAL_ERROR,
 };
 
+// TODO: trait unnecessary
 /// Concrete engine trait which provides context for each decision.
 pub trait GameEngine {
     type Data: GameData;
