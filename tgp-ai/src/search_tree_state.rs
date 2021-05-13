@@ -1,4 +1,4 @@
-use std::convert::TryFrom;
+use std::{cmp::Ordering, convert::TryFrom, usize};
 
 use tgp::{GameData, RevEffect};
 
@@ -9,11 +9,17 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct TreeIndex(usize, usize);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord)]
 pub(crate) struct TreeEntry {
     pub rating: RatingType,
     pub index: IndexType,
     pub num_children: IndexType,
+}
+
+impl PartialOrd for TreeEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.rating.partial_cmp(&other.rating)
+    }
 }
 
 impl TreeEntry {
@@ -23,6 +29,21 @@ impl TreeEntry {
             index,
             num_children: 0,
         }
+    }
+}
+
+pub(crate) struct RetainedMoves<'a> {
+    inner: &'a mut Vec<usize>,
+    offset: usize,
+}
+
+impl<'a> RetainedMoves<'a> {
+    fn new(inner: &'a mut Vec<usize>, offset: usize) -> Self {
+        Self { inner, offset }
+    }
+
+    pub(crate) fn add(&mut self, val: usize) {
+        self.inner.push(val + self.offset);
     }
 }
 
@@ -95,6 +116,30 @@ impl SearchTreeState {
             num_children: count,
         });
         self.entry_mut(parent).num_children += 1;
+    }
+
+    pub fn update_ratings(&mut self) {
+        for i in (1..self.depth()).rev() {
+            let is_own_turn = (i % 2) == 1;
+            let (l, r) = self.tree.split_at_mut(i + 1);
+            let moves = l.last_mut().expect(INTERNAL_ERROR);
+            let children = r.first().expect(INTERNAL_ERROR);
+
+            let mut start = 0;
+            for entry in moves {
+                let num_children = usize::try_from(entry.num_children).unwrap();
+                let children = &children[start..start + num_children];
+                let new_value = if is_own_turn {
+                    children.iter().max()
+                } else {
+                    children.iter().min()
+                };
+                if let Some(e) = new_value {
+                    entry.rating = e.rating;
+                }
+                start += num_children;
+            }
+        }
     }
 
     /// f must return the engine in the same state as before
@@ -256,5 +301,22 @@ mod test {
             let tree_rating = tree_state.entry(t_index).rating;
             assert_eq!(expected_rating, tree_rating);
         });
+
+        sts.update_ratings();
+        assert_eq!(
+            sts.tree[1],
+            vec![
+                TreeEntry {
+                    rating: 0,
+                    index: 0,
+                    num_children: 3
+                },
+                TreeEntry {
+                    rating: 2,
+                    index: 1,
+                    num_children: 3
+                }
+            ]
+        );
     }
 }
