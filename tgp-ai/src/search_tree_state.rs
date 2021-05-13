@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, convert::TryFrom, usize};
+use std::{cmp::Ordering, convert::TryFrom, mem, usize};
 
 use tgp::{GameData, RevEffect};
 
@@ -30,6 +30,10 @@ impl TreeEntry {
             num_children: 0,
         }
     }
+
+    pub fn num_children(&self) -> usize {
+        usize::try_from(self.num_children).unwrap()
+    }
 }
 
 pub(crate) struct RetainedMoves<'a> {
@@ -43,6 +47,7 @@ impl<'a> RetainedMoves<'a> {
     }
 
     pub(crate) fn add(&mut self, val: usize) {
+        debug_assert!(self.inner.last().map_or(true, |&x| val > x));
         self.inner.push(val + self.offset);
     }
 }
@@ -127,8 +132,7 @@ impl SearchTreeState {
 
             let mut start = 0;
             for entry in moves {
-                let num_children = usize::try_from(entry.num_children).unwrap();
-                let children = &children[start..start + num_children];
+                let children = &children[start..start + entry.num_children()];
                 let new_value = if is_own_turn {
                     children.iter().max()
                 } else {
@@ -137,9 +141,59 @@ impl SearchTreeState {
                 if let Some(e) = new_value {
                     entry.rating = e.rating;
                 }
-                start += num_children;
+                start += entry.num_children();
             }
         }
+    }
+
+    pub fn prune<F>(&mut self, mut retain_fn: F)
+    where
+        F: FnMut(usize, &[TreeEntry], RetainedMoves),
+    {
+        // sentinel
+        let mut old_retained = vec![0];
+        let mut current_retained = Vec::new();
+        for i in 1..self.tree.len() {
+            let moves = &self.tree[i];
+            let mut offset = 0;
+            let mut retained = old_retained.iter().copied().peekable();
+            // compute retained children
+            for (j, entry) in self.tree[i - 1].iter().enumerate() {
+                // if the entry is retained, continue to prune its children
+                if retained.peek() == Some(&j) {
+                    retain_fn(
+                        i,
+                        &moves[offset..offset + entry.num_children()],
+                        RetainedMoves::new(&mut current_retained, offset),
+                    );
+                    retained.next();
+                }
+                offset += entry.num_children();
+            }
+
+            // remove pruned elements
+            Self::retain_by_index(&mut self.tree[i - 1], &old_retained);
+            old_retained = mem::take(&mut current_retained);
+        }
+        // last level
+        Self::retain_by_index(self.tree.last_mut().unwrap(), &old_retained);
+    }
+
+    fn retain_by_index<T: Copy>(vec: &mut Vec<T>, indices: &[usize]) {
+        let mut retained = indices.iter().copied().peekable();
+        *vec = vec
+            .iter()
+            .enumerate()
+            .filter(|(j, _)| {
+                if retained.peek() == Some(&j) {
+                    retained.next();
+                    true
+                } else {
+                    false
+                }
+            })
+            .map(|(_, &x)| x)
+            .collect();
     }
 
     /// f must return the engine in the same state as before
@@ -173,13 +227,13 @@ impl SearchTreeState {
             function(self, stepper, t_index);
         } else {
             let offset = children_start[t_index.0];
-            for child in 0..self.entry(t_index).num_children {
-                let index = usize::try_from(child).unwrap() + offset;
+            for child in 0..self.entry(t_index).num_children() {
+                let index = child + offset;
                 let entry = self.get_level(depth)[index];
                 stepper.forward_step(entry.index);
                 self.for_each_leaf_impl(stepper, function, TreeIndex(depth, index), children_start);
                 stepper.backward_step();
-                children_start[depth] += usize::try_from(entry.num_children).unwrap();
+                children_start[depth] += entry.num_children();
             }
         }
     }
@@ -271,6 +325,31 @@ mod test {
                 TreeEntry::new((0, 0)),
             ]
         );
+
+        sts.prune(|_, elements, mut retainer| {
+            for (i, entry) in elements.iter().enumerate() {
+                if entry.rating > 0 {
+                    retainer.add(i);
+                }
+            }
+        });
+        assert_eq!(
+            sts.tree[1],
+            vec![TreeEntry {
+                rating: 3,
+                index: 3,
+                num_children: 1
+            }]
+        );
+        assert_eq!(
+            sts.tree[2],
+            vec![TreeEntry {
+                rating: 33,
+                index: 3,
+                num_children: 1
+            }]
+        );
+        assert_eq!(sts.tree[3], vec![TreeEntry::new((333, 3)),]);
     }
 
     #[test]
