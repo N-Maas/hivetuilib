@@ -20,7 +20,7 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "FlatDecision {{ player: {:?}, context: {:?}, options.len(): {:?} }}",
+            "PlainDecision {{ player: {:?}, context: {:?}, options.len(): {:?} }}",
             self.player,
             &self.context,
             self.options.len()

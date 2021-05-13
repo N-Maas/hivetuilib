@@ -13,15 +13,26 @@ pub use params::*;
 
 #[cfg(test)]
 pub(crate) mod test {
-    use tgp::{plain_decision::PlainDecision, GameData, RevEffect};
+    use crate::rater::DecisionType;
+    use tgp::{plain_decision::PlainDecision, Effect, GameData, RevEffect};
+
+    pub(crate) fn type_mapping(context: &ZeroOneContext) -> DecisionType {
+        match context {
+            ZeroOneContext::Flat | ZeroOneContext::ZeroAnd | ZeroOneContext::OneAnd => {
+                DecisionType::BottomLevel
+            }
+            ZeroOneContext::Base => DecisionType::HigherLevel,
+        }
+    }
 
     /// A game where zeros and ones are counted and the state is represented by the sum of each.
+    #[derive(Debug, Clone)]
     pub(crate) struct ZeroOneGame {
-        num_zeros: u32,
-        num_ones: u32,
-        use_high_level: bool,
-        player: usize,
-        finished_at: u32,
+        pub num_zeros: u32,
+        pub num_ones: u32,
+        pub use_high_level: bool,
+        pub player: usize,
+        pub finished_at: u32,
     }
 
     impl ZeroOneGame {
@@ -38,6 +49,17 @@ pub(crate) mod test {
         fn update(&mut self) {
             self.use_high_level = !self.use_high_level;
             self.player = (self.player + 1) % 2;
+        }
+    }
+
+    fn chain<F, G, R>(f: F, g: G) -> impl Fn(&mut ZeroOneGame) -> R + Clone
+    where
+        F: Fn(&mut ZeroOneGame) -> R + Clone,
+        G: Fn(&mut ZeroOneGame) -> R + Clone,
+    {
+        move |data| {
+            f(data);
+            g(data)
         }
     }
 
@@ -82,14 +104,17 @@ pub(crate) mod test {
                 let mut dec = PlainDecision::with_context(player, ZeroOneContext::Base);
                 dec.add_follow_up(move |_| {
                     let mut zero_dec = PlainDecision::with_context(player, ZeroOneContext::ZeroAnd);
-                    zero_dec.add_rev_effect(apply_zero, undo_zero);
-                    zero_dec.add_rev_effect(apply_one, undo_one);
+                    zero_dec
+                        .add_rev_effect(chain(apply_zero, apply_zero), chain(undo_zero, undo_zero));
+                    zero_dec
+                        .add_rev_effect(chain(apply_zero, apply_one), chain(undo_one, undo_zero));
                     zero_dec
                 });
                 dec.add_follow_up(move |_| {
                     let mut one_dec = PlainDecision::with_context(player, ZeroOneContext::OneAnd);
-                    one_dec.add_rev_effect(apply_zero, undo_zero);
-                    one_dec.add_rev_effect(apply_one, undo_one);
+                    one_dec
+                        .add_rev_effect(chain(apply_one, apply_zero), chain(undo_one, undo_zero));
+                    one_dec.add_rev_effect(chain(apply_one, apply_one), chain(undo_one, undo_one));
                     one_dec
                 });
                 Some(Box::new(dec))
