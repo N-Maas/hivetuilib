@@ -59,15 +59,8 @@ pub(crate) struct SearchTreeState {
 }
 
 impl SearchTreeState {
-    pub fn new<I>(initial_moves: I) -> Self
-    where
-        I: IntoIterator<Item = (RatingType, IndexType)>,
+    pub fn new() -> Self
     {
-        let initial_moves = initial_moves
-            .into_iter()
-            .map(TreeEntry::new)
-            .collect::<Vec<_>>();
-        let num_children = IndexType::try_from(initial_moves.len()).unwrap();
         Self {
             tree: vec![
                 vec![
@@ -75,10 +68,9 @@ impl SearchTreeState {
                     TreeEntry {
                         rating: 0,
                         index: 0,
-                        num_children,
+                        num_children: 0,
                     },
                 ],
-                initial_moves,
             ],
             next_levels: None,
         }
@@ -203,12 +195,19 @@ impl SearchTreeState {
         mut function: F,
     ) where
         T::EffectType: RevEffect<T>,
-        F: FnMut(&mut Self, &mut EngineStepper<T, M>, TreeIndex),
+        F: FnMut(&mut Self, &mut EngineStepper<T, M>, TreeIndex, &[(T::Context, usize)]),
         M: Fn(&T::Context) -> DecisionType,
     {
         assert!(self.depth() > 0);
         let mut children_start = vec![0; self.tree.len()];
-        self.for_each_leaf_impl(stepper, &mut function, TreeIndex(0, 0), &mut children_start);
+        let mut decision_context = Vec::new();
+        self.for_each_leaf_impl(
+            stepper,
+            &mut function,
+            TreeIndex(0, 0),
+            &mut children_start,
+            &mut decision_context,
+        );
     }
 
     fn for_each_leaf_impl<T: GameData, F, M>(
@@ -217,21 +216,29 @@ impl SearchTreeState {
         function: &mut F,
         t_index: TreeIndex,
         children_start: &mut Vec<usize>,
+        decision_context: &mut Vec<(T::Context, usize)>,
     ) where
         T::EffectType: RevEffect<T>,
-        F: FnMut(&mut Self, &mut EngineStepper<T, M>, TreeIndex),
+        F: FnMut(&mut Self, &mut EngineStepper<T, M>, TreeIndex, &[(T::Context, usize)]),
         M: Fn(&T::Context) -> DecisionType,
     {
         let depth = t_index.0 + 1;
         if depth == self.tree.len() {
-            function(self, stepper, t_index);
+            function(self, stepper, t_index, &decision_context);
         } else {
             let offset = children_start[t_index.0];
             for child in 0..self.entry(t_index).num_children() {
-                let index = child + offset;
-                let entry = self.get_level(depth)[index];
-                stepper.forward_step(entry.index);
-                self.for_each_leaf_impl(stepper, function, TreeIndex(depth, index), children_start);
+                let entry = self.get_level(depth)[child + offset];
+                let context = stepper.forward_step(entry.index);
+                decision_context.push(context);
+                self.for_each_leaf_impl(
+                    stepper,
+                    function,
+                    TreeIndex(depth, child + offset),
+                    children_start,
+                    decision_context,
+                );
+                decision_context.pop();
                 stepper.backward_step();
                 children_start[depth] += entry.num_children();
             }
@@ -266,38 +273,27 @@ mod test {
 
     #[test]
     fn build_search_tree_test() {
-        let mut sts = SearchTreeState::new(vec![(0, 1), (3, 3), (-1, 2)]);
-        assert_eq!(sts.depth(), 1);
-        assert_eq!(sts.tree.last().unwrap().len(), 3);
+        let mut sts = SearchTreeState::new();
+        assert_eq!(sts.depth(), 0);
 
         sts.new_levels();
-        sts.push_child(TreeIndex(1, 0), 0, 1, vec![(0, 1)]);
-        sts.push_child(TreeIndex(1, 1), 33, 3, vec![(333, 3)]);
-        sts.push_child(TreeIndex(1, 2), -11, 2, vec![(-111, 2), (0, 0)]);
+        sts.push_child(TreeIndex(0, 0), 0, 1, vec![(0, 1)]);
+        sts.push_child(TreeIndex(0, 0), 33, 3, vec![(333, 3)]);
+        sts.push_child(TreeIndex(0, 0), -11, 2, vec![(-111, 2), (0, 0)]);
         sts.extend();
 
         assert_eq!(
-            sts.tree[1],
+            sts.tree[0],
             vec![
                 TreeEntry {
                     rating: 0,
-                    index: 1,
-                    num_children: 1
+                    index: 0,
+                    num_children: 3
                 },
-                TreeEntry {
-                    rating: 3,
-                    index: 3,
-                    num_children: 1
-                },
-                TreeEntry {
-                    rating: -1,
-                    index: 2,
-                    num_children: 1
-                }
             ]
         );
         assert_eq!(
-            sts.tree[2],
+            sts.tree[1],
             vec![
                 TreeEntry {
                     rating: 0,
@@ -317,7 +313,7 @@ mod test {
             ]
         );
         assert_eq!(
-            sts.tree[3],
+            sts.tree[2],
             vec![
                 TreeEntry::new((0, 1)),
                 TreeEntry::new((333, 3)),
@@ -336,30 +332,27 @@ mod test {
         assert_eq!(
             sts.tree[1],
             vec![TreeEntry {
-                rating: 3,
-                index: 3,
-                num_children: 1
-            }]
-        );
-        assert_eq!(
-            sts.tree[2],
-            vec![TreeEntry {
                 rating: 33,
                 index: 3,
                 num_children: 1
             }]
         );
-        assert_eq!(sts.tree[3], vec![TreeEntry::new((333, 3)),]);
+        assert_eq!(sts.tree[2], vec![TreeEntry::new((333, 3)),]);
     }
 
     #[test]
     fn iteration_test() {
-        let mut sts = SearchTreeState::new(vec![(-1, 0), (1, 1)]);
+        let mut sts = SearchTreeState::new();
+        // TODO: initialization is a bit broken
+        sts.tree[0].first_mut().unwrap().num_children = 2;
+        sts.tree.push(vec![TreeEntry::new((-1, 0)), TreeEntry::new((1, 1))]);
+
         let data = ZeroOneGame::new(false, 4);
         let mut stepper = EngineStepper::new(Engine::new_logging(2, data), type_mapping);
 
         sts.new_levels();
-        sts.for_each_leaf(&mut stepper, |tree_state, stepper, t_index| {
+        sts.for_each_leaf(&mut stepper, |tree_state, stepper, t_index, c| {
+            assert_eq!(c.len(), 1);
             let rating =
                 stepper.data().num_ones as RatingType - stepper.data().num_zeros as RatingType;
             tree_state.push_child(t_index, rating, 1, vec![(rating + 1, 1)]);
@@ -374,7 +367,8 @@ mod test {
         sts.extend();
         assert_eq!(sts.tree.last().unwrap().len(), 8);
 
-        sts.for_each_leaf(&mut stepper, |tree_state, stepper, t_index| {
+        sts.for_each_leaf(&mut stepper, |tree_state, stepper, t_index, c| {
+            assert_eq!(c.len(), 3);
             let expected_rating =
                 stepper.data().num_ones as RatingType - stepper.data().num_zeros as RatingType;
             let tree_rating = tree_state.entry(t_index).rating;

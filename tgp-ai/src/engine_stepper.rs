@@ -42,10 +42,12 @@ where
         }
     }
 
-    pub fn forward_step(&mut self, index: IndexType) {
+    pub fn forward_step(&mut self, index: IndexType) -> (T::Context, usize) {
         let mut current_index = usize::try_from(index).unwrap();
-        for_each_decision_flat(&mut self.engine, &self.type_mapping, |dec, _| {
+        let mut decision_context = None;
+        for_each_decision_flat(&mut self.engine, &self.type_mapping, |dec, context| {
             if current_index < dec.option_count() {
+                decision_context = Some((context, current_index));
                 true
             } else {
                 current_index -= dec.option_count();
@@ -65,6 +67,7 @@ where
             }
             _ => panic!("{}", INTERNAL_ERROR),
         }
+        decision_context.expect(INTERNAL_ERROR)
     }
 
     pub fn backward_step(&mut self) {
