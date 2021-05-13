@@ -1,4 +1,4 @@
-const INTERNAL_ERROR: &str = "Internal error in AI algorithm - impossible state";
+const INTERNAL_ERROR: &str = "Internal error in AI algorithm!";
 
 type IndexType = u32;
 type RatingType = i32;
@@ -14,7 +14,7 @@ pub use params::*;
 #[cfg(test)]
 pub(crate) mod test {
     use crate::rater::DecisionType;
-    use tgp::{plain_decision::PlainDecision, Effect, GameData, RevEffect};
+    use tgp::{plain_decision::PlainDecision, GameData, RevEffect};
 
     pub(crate) fn type_mapping(context: &ZeroOneContext) -> DecisionType {
         match context {
@@ -83,20 +83,23 @@ pub(crate) mod test {
             let player = self.player;
             let apply_zero = |data: &mut ZeroOneGame| {
                 data.num_zeros += 1;
-                data.update();
                 None
             };
             let undo_zero = |data: &mut ZeroOneGame| {
                 data.num_zeros -= 1;
-                data.update();
             };
             let apply_one = |data: &mut ZeroOneGame| {
                 data.num_ones += 1;
-                data.update();
                 None
             };
             let undo_one = |data: &mut ZeroOneGame| {
                 data.num_ones -= 1;
+            };
+            let apply_update = |data: &mut ZeroOneGame| {
+                data.update();
+                None
+            };
+            let update = |data: &mut ZeroOneGame| {
                 data.update();
             };
 
@@ -104,24 +107,33 @@ pub(crate) mod test {
                 let mut dec = PlainDecision::with_context(player, ZeroOneContext::Base);
                 dec.add_follow_up(move |_| {
                     let mut zero_dec = PlainDecision::with_context(player, ZeroOneContext::ZeroAnd);
-                    zero_dec
-                        .add_rev_effect(chain(apply_zero, apply_zero), chain(undo_zero, undo_zero));
-                    zero_dec
-                        .add_rev_effect(chain(apply_zero, apply_one), chain(undo_one, undo_zero));
+                    zero_dec.add_rev_effect(
+                        chain(chain(apply_zero, apply_zero), apply_update),
+                        chain(chain(undo_zero, undo_zero), update),
+                    );
+                    zero_dec.add_rev_effect(
+                        chain(chain(apply_zero, apply_one), apply_update),
+                        chain(chain(undo_one, undo_zero), update),
+                    );
                     zero_dec
                 });
                 dec.add_follow_up(move |_| {
                     let mut one_dec = PlainDecision::with_context(player, ZeroOneContext::OneAnd);
-                    one_dec
-                        .add_rev_effect(chain(apply_one, apply_zero), chain(undo_one, undo_zero));
-                    one_dec.add_rev_effect(chain(apply_one, apply_one), chain(undo_one, undo_one));
+                    one_dec.add_rev_effect(
+                        chain(chain(apply_one, apply_zero), apply_update),
+                        chain(chain(undo_one, undo_zero), update),
+                    );
+                    one_dec.add_rev_effect(
+                        chain(chain(apply_one, apply_one), apply_update),
+                        chain(chain(undo_one, undo_one), update),
+                    );
                     one_dec
                 });
                 Some(Box::new(dec))
             } else {
                 let mut dec = PlainDecision::with_context(player, ZeroOneContext::Flat);
-                dec.add_rev_effect(apply_zero, undo_zero);
-                dec.add_rev_effect(apply_one, undo_one);
+                dec.add_rev_effect(chain(apply_zero, apply_update), chain(undo_zero, update));
+                dec.add_rev_effect(chain(apply_one, apply_update), chain(undo_one, update));
                 Some(Box::new(dec))
             }
         }

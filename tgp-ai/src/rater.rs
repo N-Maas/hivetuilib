@@ -11,7 +11,6 @@ use crate::{IndexType, RatingType, INTERNAL_ERROR};
 pub enum DecisionType {
     HigherLevel,
     BottomLevel,
-    Mixed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -297,7 +296,6 @@ where
             false
         }
         DecisionType::BottomLevel => apply(&dec, context),
-        DecisionType::Mixed => panic!("Mixed decisions are not supported yet by the AI."),
     }
 }
 

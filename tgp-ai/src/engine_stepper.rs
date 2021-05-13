@@ -10,6 +10,7 @@ use crate::{
     IndexType, INTERNAL_ERROR,
 };
 
+// TODO: abstract over multiple decisions by same player? --> is probably hard
 pub(crate) struct EngineStepper<T: GameData, F>
 where
     T::EffectType: RevEffect<T>,
