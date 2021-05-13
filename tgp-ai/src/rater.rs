@@ -28,6 +28,7 @@ pub struct Rater<T: GameData> {
     max_rating: RatingType,
 }
 
+// TODO: not a great API due to borrowing conflict
 impl<T: GameData> Rater<T> {
     pub fn context(&self, index: usize) -> &T::Context {
         &self.decisions[index].0
@@ -117,6 +118,7 @@ impl<T: GameData> Rater<T> {
         }
     }
 
+    /// The result is sorted in decreasing order.
     pub(crate) fn cut_and_sort(self, min: RatingType) -> Vec<(RatingType, IndexType)> {
         let mut result = self
             .move_ratings
@@ -133,10 +135,11 @@ impl<T: GameData> Rater<T> {
             })
             .filter(|&(val, _)| val >= min)
             .collect::<Vec<_>>();
-        result.sort_by(|(val1, _), (val2, _)| val1.cmp(val2));
+        result.sort_by(|(val1, _), (val2, _)| val2.cmp(val1));
         result
     }
 
+    /// The result is sorted in decreasing order.
     pub(crate) fn cut_and_sort_with_equivalency(
         mut self,
         min: RatingType,
@@ -145,7 +148,7 @@ impl<T: GameData> Rater<T> {
         for i in 0..self.move_ratings.len() {
             self.move_rating_at(i, min, &mut result);
         }
-        result.sort_by(|(val1, _, _), (val2, _, _)| val1.cmp(val2));
+        result.sort_by(|(val1, _, _), (val2, _, _)| val2.cmp(val1));
         result
     }
 
@@ -349,7 +352,7 @@ mod test {
         rater.rate(1, 0, 2);
         rater.rate(1, 1, 1);
         let result = rater.cut_and_sort(1);
-        assert_eq!(result, vec![(1, 3), (2, 2), (3, 1)]);
+        assert_eq!(result, vec![(3, 1), (2, 2), (1, 3)]);
 
         let mut rater = Rater::new(&mut engine, type_mapping);
         rater.rate(0, 0, 0);
@@ -357,6 +360,6 @@ mod test {
         rater.set_equivalent_to(1, 0, 0, 1);
         rater.rate(1, 1, 4);
         let result = rater.cut_and_sort_with_equivalency(1);
-        assert_eq!(result, vec![(1, 1, vec![2]), (4, 3, Vec::new())]);
+        assert_eq!(result, vec![(4, 3, Vec::new()), (1, 1, vec![2])]);
     }
 }

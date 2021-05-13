@@ -17,6 +17,7 @@ where
     F: Fn(&T::Context) -> DecisionType,
 {
     engine: Engine<T, EventLog<T>>,
+    decision_context: Vec<(T::Context, usize)>,
     type_mapping: F,
 }
 
@@ -38,16 +39,17 @@ where
     pub fn new(engine: Engine<T, EventLog<T>>, type_mapping: F) -> Self {
         Self {
             engine,
+            decision_context: Vec::new(),
             type_mapping,
         }
     }
 
-    pub fn forward_step(&mut self, index: IndexType) -> (T::Context, usize) {
+    pub fn forward_step(&mut self, index: IndexType) {
         let mut current_index = usize::try_from(index).unwrap();
-        let mut decision_context = None;
+        let mut chosen_context = None;
         for_each_decision_flat(&mut self.engine, &self.type_mapping, |dec, context| {
             if current_index < dec.option_count() {
-                decision_context = Some((context, current_index));
+                chosen_context = Some((context, current_index));
                 true
             } else {
                 current_index -= dec.option_count();
@@ -67,10 +69,12 @@ where
             }
             _ => panic!("{}", INTERNAL_ERROR),
         }
-        decision_context.expect(INTERNAL_ERROR)
+        self.decision_context
+            .push(chosen_context.expect(INTERNAL_ERROR));
     }
 
     pub fn backward_step(&mut self) {
+        self.decision_context.pop();
         if !self.engine.undo_last_decision() {
             panic!("{}", INTERNAL_ERROR)
         }
@@ -78,6 +82,14 @@ where
 
     pub fn is_finished(&self) -> bool {
         self.engine.is_finished()
+    }
+
+    pub fn decision_context(&self) -> &[(T::Context, usize)] {
+        &self.decision_context
+    }
+
+    pub fn engine(&mut self) -> &mut Engine<T, EventLog<T>> {
+        &mut self.engine
     }
 
     pub fn data(&self) -> &T {
