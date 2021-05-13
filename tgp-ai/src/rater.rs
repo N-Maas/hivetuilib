@@ -98,7 +98,7 @@ impl<T: GameData> Rater<T> {
         let mut decisions = Vec::new();
         let mut move_ratings = Vec::new();
         let mut start = 0;
-        for_each_decision_flat(engine, &type_mapping, &mut |dec, context| {
+        for_each_decision_flat(engine, type_mapping, |dec, context| {
             let option_count = dec.option_count();
             start += option_count;
             decisions.push((
@@ -108,6 +108,8 @@ impl<T: GameData> Rater<T> {
             for _ in 0..option_count {
                 move_ratings.push(Rating::None);
             }
+            // always continue the iteration
+            false
         });
         Self {
             decisions,
@@ -255,13 +257,26 @@ impl<'a, T: GameData> Iterator for Iter<'a, T> {
     }
 }
 
+/// If apply returns true, the iteration is stopped
 pub(crate) fn for_each_decision_flat<T: GameData, L: EventListener<T>, F, A>(
+    engine: &mut Engine<T, L>,
+    type_mapping: F,
+    mut apply: A,
+) where
+    F: Fn(&T::Context) -> DecisionType,
+    A: FnMut(&PendingDecision<T, L>, T::Context) -> bool,
+{
+    for_each_decision_flat_impl(engine, &type_mapping, &mut apply);
+}
+
+fn for_each_decision_flat_impl<T: GameData, L: EventListener<T>, F, A>(
     engine: &mut Engine<T, L>,
     type_mapping: &F,
     apply: &mut A,
-) where
+) -> bool
+where
     F: Fn(&T::Context) -> DecisionType,
-    A: FnMut(&PendingDecision<T, L>, T::Context),
+    A: FnMut(&PendingDecision<T, L>, T::Context) -> bool,
 {
     let dec = pull_decision(engine);
     let context = dec.context();
@@ -270,12 +285,16 @@ pub(crate) fn for_each_decision_flat<T: GameData, L: EventListener<T>, F, A>(
             let option_count = dec.option_count();
             for i in 0..option_count {
                 pull_decision(engine).select_option(i);
-                for_each_decision_flat(engine, type_mapping, apply);
+                let stop = for_each_decision_flat_impl(engine, type_mapping, apply);
+                if stop {
+                    return true;
+                }
                 pull_decision(engine)
                     .into_follow_up_decision()
                     .expect(INTERNAL_ERROR)
                     .retract();
             }
+            false
         }
         DecisionType::BottomLevel => apply(&dec, context),
         DecisionType::Mixed => panic!("Mixed decisions are not supported yet by the AI."),
@@ -295,18 +314,9 @@ fn pull_decision<T: GameData, L: EventListener<T>>(
 mod test {
     use tgp::engine::Engine;
 
-    use crate::test::{ZeroOneContext, ZeroOneGame};
+    use crate::test::{type_mapping, ZeroOneContext, ZeroOneGame};
 
-    use super::{DecisionType, Rater};
-
-    fn type_mapping(context: &ZeroOneContext) -> DecisionType {
-        match context {
-            ZeroOneContext::Flat | ZeroOneContext::ZeroAnd | ZeroOneContext::OneAnd => {
-                DecisionType::BottomLevel
-            }
-            ZeroOneContext::Base => DecisionType::HigherLevel,
-        }
-    }
+    use super::Rater;
 
     #[test]
     fn basic_test() {
@@ -320,7 +330,7 @@ mod test {
 
     #[test]
     fn two_level_test() {
-        let data = ZeroOneGame::new(true, 1);
+        let data = ZeroOneGame::new(true, 2);
         let mut engine = Engine::new_logging(2, data);
         let rater = Rater::new(&mut engine, type_mapping);
 
