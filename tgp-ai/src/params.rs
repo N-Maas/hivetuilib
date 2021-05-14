@@ -22,6 +22,7 @@ pub struct Params {
     // TODO: scale limits for larger tree?
 }
 
+// TODO: proper builder pattern?
 impl Params {
     pub fn integrity_check(&self) {
         assert!(self.limit_multiplier_first_move >= 1.0);
@@ -30,6 +31,26 @@ impl Params {
         assert!(self.first_cut_delay_depth > 0);
         self.branch_differences.integrity_check();
         self.move_differences.integrity_check();
+    }
+
+    pub fn new(
+        depth: usize,
+        branch_limit: usize,
+        branch_difference_probable: RatingType,
+        move_difference_probable: RatingType,
+    ) -> Self {
+        Self {
+            depth,
+            limit_multiplier_first_move: 2.0,
+            branch_limit_first_cut: branch_limit,
+            branch_limit_long_tail: (branch_limit + 1) / 2,
+            first_cut_delay_depth: 2,
+            first_move_added_delay_depth: 0,
+            tail_to_first_cut_depth: 2,
+            branch_differences: DifferenceParams::new(branch_difference_probable),
+            move_limit: 2 * branch_limit,
+            move_differences: DifferenceParams::new(move_difference_probable),
+        }
     }
 }
 

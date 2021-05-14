@@ -3,17 +3,22 @@ const INTERNAL_ERROR: &str = "Internal error in AI algorithm!";
 type IndexType = u32;
 type RatingType = i32;
 
+mod algorithm;
 mod engine_stepper;
 mod params;
 mod search_tree_state;
 
 pub mod rater;
 
+pub use algorithm::*;
 pub use params::*;
 
 #[cfg(test)]
 pub(crate) mod test {
-    use crate::rater::DecisionType;
+    use crate::{
+        rater::{DecisionType, Rater},
+        RateAndMap, RatingType,
+    };
     use tgp::{plain_decision::PlainDecision, GameData, RevEffect};
 
     pub(crate) fn type_mapping(context: &ZeroOneContext) -> DecisionType {
@@ -136,6 +141,68 @@ pub(crate) mod test {
                 dec.add_rev_effect(chain(apply_one, apply_update), chain(undo_one, update));
                 Some(Box::new(dec))
             }
+        }
+    }
+
+    pub(crate) struct RateAndMapZeroOne;
+
+    impl RateAndMap<ZeroOneGame> for RateAndMapZeroOne {
+        fn apply_type_mapping(&self, context: &ZeroOneContext) -> DecisionType {
+            type_mapping(context)
+        }
+
+        fn rate_moves(
+            &self,
+            rater: &mut Rater<ZeroOneGame>,
+            _data: &ZeroOneGame,
+            _old_context: &[(ZeroOneContext, usize)],
+            player: usize,
+        ) {
+            for i in 0..rater.num_decisions() {
+                match rater.context(i) {
+                    ZeroOneContext::Flat => {
+                        if player == 0 {
+                            rater.rate(i, 0, 1);
+                            rater.rate(i, 1, 0);
+                        } else {
+                            rater.rate(i, 0, 0);
+                            rater.rate(i, 1, 1);
+                        }
+                    }
+                    ZeroOneContext::ZeroAnd => {
+                        if player == 0 {
+                            rater.rate(i, 0, 2);
+                            rater.rate(i, 1, 0);
+                        } else {
+                            rater.rate(i, 0, -2);
+                            rater.rate(i, 1, 0);
+                        }
+                    }
+                    ZeroOneContext::OneAnd => {
+                        if player == 0 {
+                            rater.rate(i, 0, 0);
+                            rater.rate(i, 1, -2);
+                        } else {
+                            rater.rate(i, 0, 0);
+                            rater.rate(i, 1, 2);
+                        }
+                    }
+                    ZeroOneContext::Base => unreachable!(),
+                }
+            }
+        }
+
+        fn rate_game_state(
+            &self,
+            data: &ZeroOneGame,
+            _old_context: &[(ZeroOneContext, usize)],
+            player: usize,
+        ) -> RatingType {
+            let mut diff = data.num_ones as i32 - data.num_zeros as i32;
+            if player == 0 {
+                diff = -diff;
+            }
+            diff * diff.abs()
         }
     }
 }

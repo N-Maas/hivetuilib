@@ -135,7 +135,7 @@ impl<T: GameData> Rater<T> {
             })
             .filter(|&(val, _)| val >= min)
             .collect::<Vec<_>>();
-        result.sort_by(|(val1, _), (val2, _)| val2.cmp(val1));
+        result.sort_unstable_by(|(val1, _), (val2, _)| val2.cmp(val1));
         result
     }
 
@@ -148,7 +148,7 @@ impl<T: GameData> Rater<T> {
         for i in 0..self.move_ratings.len() {
             self.move_rating_at(i, min, &mut result);
         }
-        result.sort_by(|(val1, _, _), (val2, _, _)| val2.cmp(val1));
+        result.sort_unstable_by(|(val1, _, _), (val2, _, _)| val2.cmp(val1));
         result
     }
 
