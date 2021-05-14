@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{cmp::Ordering, iter::FromIterator, marker::PhantomData};
 
 use tgp::{GameData, RevEffect};
 
@@ -6,7 +6,7 @@ use crate::{
     engine_stepper::EngineStepper,
     rater::{DecisionType, Rater},
     search_tree_state::SearchTreeState,
-    Params, RatingType, INTERNAL_ERROR,
+    IndexType, Params, RatingType, INTERNAL_ERROR,
 };
 
 pub trait RateAndMap<T: GameData> {
@@ -51,6 +51,156 @@ where
         }
     }
 
+    fn collect_recursive<M>(
+        &self,
+        depth: usize,
+        stepper: &mut EngineStepper<T, M>,
+        player: usize,
+        delay_depth: usize,
+        branch_diff: RatingType,
+        branch_limit: usize,
+        move_diff: RatingType,
+        move_limit: usize,
+    ) -> Vec<(RatingType, IndexType, Vec<(RatingType, IndexType)>)>
+    where
+        M: Fn(&T::Context) -> DecisionType,
+    {
+        if depth == 0 || stepper.is_finished() {
+            return Vec::new();
+        }
+
+        let is_own_turn = stepper.player() == player;
+        let compare = move |l: i32, r: i32| {
+            if is_own_turn {
+                r.cmp(&l)
+            } else {
+                l.cmp(&r)
+            }
+        };
+
+        // collect moves and calculate min-max ratings
+        let moves = self.create_move_ratings(
+            stepper,
+            move_diff,
+            move_limit,
+            Rater::cut_and_sort_with_equivalency,
+        );
+        let mut moves = Vec::from_iter(moves.into_iter().map(|(_, index, eq)| {
+            stepper.forward_step(index);
+            let (rating, children) = self.collect_and_cut(depth - 1, stepper, player);
+            stepper.backward_step();
+            (rating, index, eq, children)
+        }));
+
+        // cut the moves to the defined limit
+        if depth >= 2 * delay_depth {
+            moves.sort_unstable_by(|&(r1, _, _, _), &(r2, _, _, _)| compare(r1, r2));
+            let min = moves.first().unwrap().0;
+            moves.retain(|(rating, _, _, _)| RatingType::abs(*rating - min) <= branch_diff);
+            if moves.len() > branch_limit {
+                // TODO: Clustering
+                moves.truncate(branch_limit);
+            }
+        }
+
+        // resolve equivalency classes
+        Vec::from_iter(moves.into_iter().map(
+            |(mut rating, mut index, equivalent_moves, mut children)| {
+                for m_idx in equivalent_moves {
+                    stepper.forward_step(m_idx);
+                    let (m_rating, m_children) = self.collect_and_cut(depth - 1, stepper, player);
+                    if compare(m_rating, rating) == Ordering::Less {
+                        rating = m_rating;
+                        index = m_idx;
+                        children = m_children;
+                    }
+                    stepper.backward_step();
+                }
+                (rating, index, children)
+            },
+        ))
+    }
+
+    fn collect_and_cut<M>(
+        &self,
+        depth: usize,
+        stepper: &mut EngineStepper<T, M>,
+        player: usize,
+    ) -> (RatingType, Vec<(RatingType, IndexType)>)
+    where
+        M: Fn(&T::Context) -> DecisionType,
+    {
+        if depth == 0 || stepper.is_finished() {
+            return (
+                self.rate_and_map.rate_game_state(
+                    stepper.data(),
+                    stepper.decision_context(),
+                    player,
+                ),
+                Vec::new(),
+            );
+        }
+
+        let is_own_turn = stepper.player() == player;
+        let compare = move |l: i32, r: i32| {
+            if is_own_turn {
+                r.cmp(&l)
+            } else {
+                l.cmp(&r)
+            }
+        };
+
+        // collect moves and calculate min-max ratings
+        let mut moves = self.create_move_ratings(
+            stepper,
+            self.params.move_differences.probably_worse,
+            self.params.move_limit,
+            Rater::cut_and_sort_with_equivalency,
+        );
+        for (rating, index, _) in moves.iter_mut() {
+            stepper.forward_step(*index);
+            *rating = self.min_max_rating(depth - 1, stepper, player);
+            stepper.backward_step();
+        }
+
+        // cut the moves to the defined limit
+        if depth >= (2 * self.params.first_cut_delay_depth - 1) {
+            moves.sort_unstable_by(|&(r1, _, _), &(r2, _, _)| compare(r1, r2));
+            let min = moves.first().unwrap().0;
+            moves.retain(|(rating, _, _)| {
+                RatingType::abs(*rating - min) <= self.params.branch_differences.probably_worse
+            });
+            if moves.len() > self.params.branch_limit_first_cut {
+                // TODO: Clustering
+                moves.truncate(self.params.branch_limit_first_cut);
+            }
+        }
+
+        // resolve equivalency classes
+        let result = Vec::from_iter(moves.into_iter().map(
+            |(mut rating, mut index, equivalent_moves)| {
+                for m_idx in equivalent_moves {
+                    stepper.forward_step(m_idx);
+                    let m_rating = self.min_max_rating(depth - 1, stepper, player);
+                    if compare(m_rating, rating) == Ordering::Less {
+                        rating = m_rating;
+                        index = m_idx;
+                    }
+                    stepper.backward_step();
+                }
+                (rating, index)
+            },
+        ));
+
+        // calculate result
+        let min = result
+            .iter()
+            .min_by(|&&(r1, _), &&(r2, _)| compare(r1, r2))
+            .unwrap()
+            .0;
+        (min, result)
+    }
+
     fn min_max_rating<M>(
         &self,
         depth: usize,
@@ -68,6 +218,37 @@ where
             );
         }
 
+        let is_own_turn = stepper.player() == player;
+        let moves = self.create_move_ratings(
+            stepper,
+            self.params.move_differences.probably_worse,
+            self.params.move_limit,
+            Rater::cut_and_sort,
+        );
+        let ratings = moves.into_iter().map(|(_, index)| {
+            stepper.forward_step(index);
+            let result = self.min_max_rating(depth - 1, stepper, player);
+            stepper.backward_step();
+            result
+        });
+        if is_own_turn {
+            ratings.max().expect(INTERNAL_ERROR)
+        } else {
+            ratings.min().expect(INTERNAL_ERROR)
+        }
+    }
+
+    #[inline]
+    fn create_move_ratings<M, E: Ord>(
+        &self,
+        stepper: &mut EngineStepper<T, M>,
+        move_difference: RatingType,
+        move_limit: usize,
+        rater_fn: fn(Rater<T>, RatingType) -> Vec<E>,
+    ) -> Vec<E>
+    where
+        M: Fn(&T::Context) -> DecisionType,
+    {
         let current_player = stepper.player();
         let mut rater = Rater::new(stepper.engine(), |context| {
             self.rate_and_map.apply_type_mapping(context)
@@ -78,26 +259,14 @@ where
             stepper.decision_context(),
             current_player,
         );
-        let min = rater.current_max() - self.params.move_differences.probably_worse;
-        let mut result = rater.cut_and_sort(min);
-        debug_assert!(result[0].0 >= result.last().unwrap().0);
+        let min = rater.current_max() - move_difference;
+        let mut result = rater_fn(rater, min);
+        debug_assert!(result.first().unwrap() >= result.last().unwrap());
         if result.len() > self.params.move_limit {
             // TODO: Clustering
-            result.truncate(self.params.move_limit);
+            result.truncate(move_limit);
         }
-
-        let ratings = result.into_iter().map(|(_, index)| {
-            stepper.forward_step(index);
-            let result = self.min_max_rating(depth - 1, stepper, player);
-            stepper.backward_step();
-            result
-        });
-        let is_own_turn = current_player == player;
-        if is_own_turn {
-            ratings.max().expect(INTERNAL_ERROR)
-        } else {
-            ratings.min().expect(INTERNAL_ERROR)
-        }
+        result
     }
 }
 
@@ -105,7 +274,11 @@ where
 mod test {
     use tgp::engine::Engine;
 
-    use crate::{MinMaxAlgorithm, Params, engine_stepper::EngineStepper, test::{RateAndMapZeroOne, ZeroOneGame, type_mapping}};
+    use crate::{
+        engine_stepper::EngineStepper,
+        test::{type_mapping, RateAndMapZeroOne, ZeroOneGame},
+        MinMaxAlgorithm, Params,
+    };
 
     #[test]
     fn min_max_test() {
@@ -126,5 +299,82 @@ mod test {
         assert_eq!(alg.min_max_rating(4, &mut stepper, 1), 4);
         assert_eq!(alg.min_max_rating(6, &mut stepper, 0), -4);
         assert_eq!(alg.min_max_rating(6, &mut stepper, 1), 4);
+    }
+
+    #[test]
+    fn collect_and_cut_test() {
+        let params = Params::new(4, 4, 2, 2);
+        let mut alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
+        let data = ZeroOneGame::new(false, 6);
+        let mut stepper = EngineStepper::new(Engine::new_logging(2, data), type_mapping);
+
+        assert_eq!(alg.collect_and_cut(0, &mut stepper, 0), (0, Vec::new()));
+        assert_eq!(alg.collect_and_cut(0, &mut stepper, 1), (0, Vec::new()));
+        assert_eq!(
+            alg.collect_and_cut(1, &mut stepper, 0),
+            (1, vec![(1, 0), (-1, 1)])
+        );
+        assert_eq!(
+            alg.collect_and_cut(1, &mut stepper, 1),
+            (-1, vec![(-1, 0), (1, 1)])
+        );
+        assert_eq!(
+            alg.collect_and_cut(2, &mut stepper, 0),
+            (-1, vec![(-1, 0), (-9, 1)])
+        );
+        assert_eq!(
+            alg.collect_and_cut(2, &mut stepper, 1),
+            (1, vec![(1, 0), (9, 1)])
+        );
+        alg.params.first_cut_delay_depth = 1;
+        assert_eq!(alg.collect_and_cut(2, &mut stepper, 0), (-1, vec![(-1, 0)]));
+        assert_eq!(alg.collect_and_cut(2, &mut stepper, 1), (1, vec![(1, 0)]));
+    }
+
+    #[test]
+    fn collect_recursive_test() {
+        let params = Params::new(4, 4, 2, 2);
+        let alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
+        let data = ZeroOneGame::new(false, 6);
+        let mut stepper = EngineStepper::new(Engine::new_logging(2, data), type_mapping);
+
+        assert_eq!(
+            alg.collect_recursive(0, &mut stepper, 0, 2, 2, 2, 2, 4),
+            Vec::new()
+        );
+        assert_eq!(
+            alg.collect_recursive(0, &mut stepper, 1, 2, 2, 2, 2, 4),
+            Vec::new()
+        );
+        assert_eq!(
+            alg.collect_recursive(1, &mut stepper, 0, 2, 2, 2, 2, 4),
+            vec![(1, 0, Vec::new()), (-1, 1, Vec::new())]
+        );
+        assert_eq!(
+            alg.collect_recursive(1, &mut stepper, 1, 2, 2, 2, 2, 4),
+            vec![(-1, 0, Vec::new()), (1, 1, Vec::new())]
+        );
+        assert_eq!(
+            alg.collect_recursive(2, &mut stepper, 0, 2, 2, 2, 2, 4),
+            vec![
+                (-1, 0, vec![(-1, 3), (1, 1), (1, 2)]),
+                (-9, 1, vec![(-9, 3), (-1, 1), (-1, 2)])
+            ]
+        );
+        assert_eq!(
+            alg.collect_recursive(2, &mut stepper, 1, 2, 2, 2, 2, 4),
+            vec![
+                (1, 0, vec![(1, 3), (-1, 1), (-1, 2)]),
+                (9, 1, vec![(9, 3), (1, 1), (1, 2)])
+            ]
+        );
+        assert_eq!(
+            alg.collect_recursive(2, &mut stepper, 0, 1, 2, 2, 2, 4),
+            vec![(-1, 0, vec![(-1, 3), (1, 1), (1, 2)])]
+        );
+        assert_eq!(
+            alg.collect_recursive(2, &mut stepper, 1, 1, 2, 2, 2, 4),
+            vec![(1, 0, vec![(1, 3), (-1, 1), (-1, 2)])]
+        );
     }
 }
