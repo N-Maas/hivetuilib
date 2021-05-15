@@ -4,73 +4,9 @@ mod searching_tree;
 pub use searching_set::*;
 pub use searching_tree::*;
 
-use std::{collections::HashMap, hash::Hash, iter::FromIterator, vec::IntoIter};
+use std::{iter::FromIterator, vec::IntoIter};
 
-use crate::{Board, BoardIdxType, IndexMap};
-
-// TODO: efficient set for boards with normal indizes
-
-#[derive(Debug, PartialEq, Eq, Clone, Default)]
-pub struct HashIndexMap<I: BoardIdxType + Hash, T = ()> {
-    map: HashMap<I, T>,
-}
-
-impl<I: BoardIdxType + Hash, T> HashIndexMap<I, T> {
-    pub fn new() -> Self {
-        Self {
-            map: HashMap::new(),
-        }
-    }
-}
-
-impl<'a, B: Board, T> From<&'a B> for HashIndexMap<B::Index, T>
-where
-    B::Index: Hash,
-{
-    fn from(_: &'a B) -> Self {
-        Self::new()
-    }
-}
-
-// TODO: replace with HashMap?!
-impl<I: BoardIdxType + Hash, T> IndexMap for HashIndexMap<I, T> {
-    type IndexType = I;
-    type Item = T;
-    type Iter = IntoIter<I>;
-
-    fn size(&self) -> usize {
-        self.map.len()
-    }
-
-    fn contains(&self, i: Self::IndexType) -> bool {
-        self.map.contains_key(&i)
-    }
-
-    fn get(&self, i: Self::IndexType) -> Option<&T> {
-        self.map.get(&i)
-    }
-
-    fn get_mut(&mut self, i: Self::IndexType) -> Option<&mut T> {
-        self.map.get_mut(&i)
-    }
-
-    fn insert(&mut self, i: Self::IndexType, el: T) -> Option<T> {
-        self.map.insert(i, el)
-    }
-
-    fn retain(&mut self, mut filter: impl FnMut(Self::IndexType, &mut T) -> bool) {
-        self.map.retain(|&i, t| filter(i, t));
-    }
-
-    // TODO: this is a bit ugly, waiting for GATs..
-    fn iter_indices(&self) -> Self::Iter {
-        self.map.keys().copied().collect::<Vec<_>>().into_iter()
-    }
-
-    fn clear(&mut self) {
-        self.map.clear()
-    }
-}
+use crate::{BoardIdxType, IndexMap};
 
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub(crate) struct SetWrapper<M: IndexMap<Item = ()>> {

@@ -3,6 +3,7 @@ mod field;
 mod trait_definitions;
 
 pub mod hypothetical;
+pub mod index_map;
 pub mod search;
 pub mod structures;
 

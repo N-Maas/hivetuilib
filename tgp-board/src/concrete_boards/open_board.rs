@@ -1,5 +1,6 @@
 use crate::{
-    search::{HashIndexMap, SearchingSet, SearchingTree},
+    index_map::HashIndexMap,
+    search::{SearchingSet, SearchingTree},
     structures::directions::{DirectionOffset, Offset, OffsetableIndex},
     Board, BoardIdxType, BoardIndexable, BoardMut, BoardToMap, Field,
 };
