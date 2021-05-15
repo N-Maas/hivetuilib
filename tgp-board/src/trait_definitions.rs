@@ -150,6 +150,7 @@ pub trait BoardIndexable {
 
 // ----- index map -----
 
+/// Note that the iteration order should always be deterministic!
 pub trait IndexMap {
     type IndexType: BoardIdxType;
     type Item;

@@ -41,6 +41,10 @@ where
         self.map.insert(index, el);
     }
 
+    pub fn clear(&mut self) {
+        self.map.clear();
+    }
+
     // TODO: is panicking a good idea?
     fn assert_contained(&self, index: B::Index) {
         if !self.board.contains(index) {

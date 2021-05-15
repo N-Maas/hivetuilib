@@ -9,12 +9,14 @@ use crate::{Board, BoardIdxType, IndexMap};
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct HashIndexMap<I: BoardIdxType + Hash, T = ()> {
     map: HashMap<I, T>,
+    indizes: Vec<I>,
 }
 
 impl<I: BoardIdxType + Hash, T> HashIndexMap<I, T> {
     pub fn new() -> Self {
         Self {
             map: HashMap::new(),
+            indizes: Vec::new(),
         }
     }
 }
@@ -51,28 +53,35 @@ impl<I: BoardIdxType + Hash, T> IndexMap for HashIndexMap<I, T> {
     }
 
     fn insert(&mut self, i: Self::IndexType, el: T) -> Option<T> {
-        self.map.insert(i, el)
+        let result = self.map.insert(i, el);
+        if result.is_none() {
+            self.indizes.push(i);
+        }
+        result
     }
 
     fn retain(&mut self, mut filter: impl FnMut(Self::IndexType, &mut T) -> bool) {
         self.map.retain(|&i, t| filter(i, t));
+        let map = &self.map;
+        self.indizes.retain(|i| map.contains_key(i))
     }
 
     // TODO: this is a bit ugly, waiting for GATs..
     fn iter_indices(&self) -> Self::Iter {
-        self.map.keys().copied().collect::<Vec<_>>().into_iter()
+        self.indizes.clone().into_iter()
     }
 
     fn clear(&mut self) {
-        self.map.clear()
+        self.map.clear();
+        self.indizes.clear();
     }
 }
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
-pub struct ArrayIndexMap<I: BoardIdxType + PartialEq, T, const N: usize> {
+pub struct ArrayIndexMap<I: BoardIdxType, T, const N: usize> {
     data: ArrayVec<(I, T), N>,
 }
 
-impl<I: BoardIdxType + PartialEq, T, const N: usize> ArrayIndexMap<I, T, N> {
+impl<I: BoardIdxType, T, const N: usize> ArrayIndexMap<I, T, N> {
     pub fn new() -> Self {
         Self {
             data: ArrayVec::new(),
@@ -85,15 +94,13 @@ impl<I: BoardIdxType + PartialEq, T, const N: usize> ArrayIndexMap<I, T, N> {
 }
 
 impl<'a, B: Board, T, const N: usize> From<&'a B> for ArrayIndexMap<B::Index, T, N>
-where
-    B::Index: Hash,
 {
     fn from(_: &'a B) -> Self {
         Self::new()
     }
 }
 
-impl<I: BoardIdxType + Hash, T, const N: usize> IndexMap for ArrayIndexMap<I, T, N> {
+impl<I: BoardIdxType, T, const N: usize> IndexMap for ArrayIndexMap<I, T, N> {
     type IndexType = I;
     type Item = T;
     type Iter = IntoIter<I>;
@@ -147,11 +154,37 @@ impl<I: BoardIdxType + Hash, T, const N: usize> IndexMap for ArrayIndexMap<I, T,
 
 #[cfg(test)]
 mod test {
-    use crate::{BoardIdxType, IndexMap};
+    use crate::{BoardIdxType, IndexMap, index_map::HashIndexMap};
 
     use super::ArrayIndexMap;
 
     impl BoardIdxType for usize {}
+
+    #[test]
+    fn hash_index_map_test() {
+        let mut map = HashIndexMap::<usize, i32>::new();
+        assert_eq!(map.size(), 0);
+
+        map.insert(0, 3);
+        map.insert(1, 2);
+        assert!(map.contains(0));
+        assert!(map.contains(1));
+        assert!(!map.contains(2));
+        assert_eq!(map.get(0), Some(&3));
+        assert_eq!(map.get(1), Some(&2));
+        map.insert(0, 0);
+        assert_eq!(map.get(0), Some(&0));
+        map.insert(2, 2);
+        assert_eq!(map.get(2), Some(&2));
+        assert_eq!(map.size(), 3);
+        map.retain(|i, _| i != 1);
+        assert_eq!(map.get(0), Some(&0));
+        assert_eq!(map.get(1), None);
+        assert_eq!(map.get(2), Some(&2));
+        assert_eq!(map.iter_indices().collect::<Vec<_>>(), vec![0, 2]);
+        map.clear();
+        assert!(!map.contains(0) && map.iter_indices().count() == 0);
+    }
 
     #[test]
     fn array_index_map_test() {
@@ -172,5 +205,12 @@ mod test {
         assert!(map.is_full());
         assert_eq!(map.get(2), Some(&2));
         assert_eq!(map.size(), 3);
+        map.retain(|i, _| i != 1);
+        assert_eq!(map.get(0), Some(&0));
+        assert_eq!(map.get(1), None);
+        assert_eq!(map.get(2), Some(&2));
+        assert_eq!(map.iter_indices().collect::<Vec<_>>(), vec![0, 2]);
+        map.clear();
+        assert!(!map.contains(0) && map.iter_indices().count() == 0);
     }
 }

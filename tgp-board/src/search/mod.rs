@@ -48,6 +48,7 @@ impl<M: IndexMap<Item = ()>> From<M> for SetWrapper<M> {
 
 // ----- result type -----
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FieldSearchResult<I: BoardIdxType> {
     data: Vec<I>,
 }
