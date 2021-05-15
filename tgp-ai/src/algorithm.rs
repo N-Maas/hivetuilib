@@ -15,6 +15,7 @@ use crate::{
 pub trait RateAndMap<T: GameData> {
     fn apply_type_mapping(&self, context: &T::Context) -> DecisionType;
 
+    // TODO: player probably unnecessary
     fn rate_moves(
         &self,
         rater: &mut Rater<T>,
@@ -23,6 +24,7 @@ pub trait RateAndMap<T: GameData> {
         player: usize,
     );
 
+    // TODO: player probably unnecessary
     fn rate_game_state(
         &self,
         data: &T,

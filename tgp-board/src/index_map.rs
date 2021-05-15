@@ -93,8 +93,7 @@ impl<I: BoardIdxType, T, const N: usize> ArrayIndexMap<I, T, N> {
     }
 }
 
-impl<'a, B: Board, T, const N: usize> From<&'a B> for ArrayIndexMap<B::Index, T, N>
-{
+impl<'a, B: Board, T, const N: usize> From<&'a B> for ArrayIndexMap<B::Index, T, N> {
     fn from(_: &'a B) -> Self {
         Self::new()
     }
@@ -154,7 +153,7 @@ impl<I: BoardIdxType, T, const N: usize> IndexMap for ArrayIndexMap<I, T, N> {
 
 #[cfg(test)]
 mod test {
-    use crate::{BoardIdxType, IndexMap, index_map::HashIndexMap};
+    use crate::{index_map::HashIndexMap, BoardIdxType, IndexMap};
 
     use super::ArrayIndexMap;
 

@@ -1,7 +1,8 @@
 const INTERNAL_ERROR: &str = "Internal error in AI algorithm!";
 
 type IndexType = u32;
-type RatingType = i32;
+// used by rating algorithm
+pub type RatingType = i32;
 
 mod algorithm;
 mod engine_stepper;

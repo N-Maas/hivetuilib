@@ -9,7 +9,7 @@ use std::{
     cmp::Ordering,
     collections::VecDeque,
     iter, mem,
-    ops::{Add, Index, IndexMut},
+    ops::{Add, Index, IndexMut, Sub},
 };
 
 // TODO: remove field
@@ -290,6 +290,14 @@ where
 
     fn add(self, rhs: D) -> Self {
         Self::from_offset(self.apply_offset(rhs.offset())).unwrap()
+    }
+}
+
+impl Sub<Self> for OpenIndex {
+    type Output = (Offset, Offset);
+
+    fn sub(self, rhs: OpenIndex) -> Self::Output {
+        (Offset(self.x - rhs.x), Offset(self.y - rhs.y))
     }
 }
 

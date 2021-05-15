@@ -1,4 +1,4 @@
-use std::{iter::FromIterator, ops::Deref};
+use std::{iter::FromIterator, ops::Deref, slice::Iter};
 
 // TODO: we should be able to lift the Clone bounds with GATs
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,6 +25,15 @@ where
             data: iter.into_iter().collect(),
             inner: Default::default(),
         }
+    }
+}
+
+impl<'a, C: Clone, I: Clone> IntoIterator for &'a VecContext<C, I> {
+    type Item = &'a C;
+    type IntoIter = Iter<'a, C>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 
