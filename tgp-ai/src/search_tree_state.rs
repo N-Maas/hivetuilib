@@ -9,7 +9,7 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct TreeIndex(usize, usize);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct TreeEntry {
     pub rating: RatingType,
     pub index: IndexType,
@@ -18,7 +18,13 @@ pub(crate) struct TreeEntry {
 
 impl PartialOrd for TreeEntry {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.rating.partial_cmp(&other.rating)
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for TreeEntry {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.rating.cmp(&other.rating)
     }
 }
 
@@ -127,7 +133,6 @@ impl SearchTreeState {
 
     pub fn update_ratings(&mut self) {
         for i in (1..self.depth()).rev() {
-            let is_own_turn = (i % 2) == 1;
             let (l, r) = self.tree.split_at_mut(i + 1);
             let moves = l.last_mut().expect(INTERNAL_ERROR);
             let children = r.first().expect(INTERNAL_ERROR);
@@ -135,6 +140,7 @@ impl SearchTreeState {
             let mut start = 0;
             for entry in moves {
                 let children = &children[start..start + entry.num_children()];
+                let is_own_turn = (i % 2) == 0;
                 let new_value = if is_own_turn {
                     children.iter().max()
                 } else {
@@ -208,7 +214,6 @@ impl SearchTreeState {
         F: FnMut(&mut Self, &mut EngineStepper<T, M>, TreeIndex),
         M: Fn(&T::Context) -> DecisionType,
     {
-        assert!(self.depth() > 0);
         let mut children_start = vec![0; self.tree.len()];
         self.for_each_leaf_impl(stepper, &mut function, TreeIndex(0, 0), &mut children_start);
     }

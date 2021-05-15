@@ -1,4 +1,4 @@
-use std::{cmp::Ord, convert::TryFrom, ops::Index, slice, usize};
+use std::{cmp::Ord, convert::TryFrom, slice, usize};
 
 use tgp::{
     engine::{Engine, EventListener, GameEngine, PendingDecision},
@@ -179,10 +179,10 @@ impl<T: GameData> Rater<T> {
                 // add value to list of equivalent moves
                 match self.move_ratings[target] {
                     Rating::Moved(to) => {
-                        to.map(|mapped| {
+                        if let Some(mapped) = to {
                             let (_, _, list) = &mut result[usize::try_from(mapped).unwrap()];
                             list.push(index);
-                        });
+                        }
                         self.move_ratings[i] = Rating::Moved(to);
                     }
                     _ => panic!("{}", INTERNAL_ERROR),
