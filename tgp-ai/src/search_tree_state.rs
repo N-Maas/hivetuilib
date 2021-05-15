@@ -77,6 +77,14 @@ impl SearchTreeState {
         self.tree.len() - 1
     }
 
+    pub fn root_moves(&self) -> impl Iterator<Item = (RatingType, IndexType)> + '_ {
+        self.tree
+            .get(1)
+            .expect(INTERNAL_ERROR)
+            .iter()
+            .map(|entry| (entry.rating, entry.index))
+    }
+
     pub fn new_levels(&mut self) {
         assert!(self.next_levels.is_none(), "{}", INTERNAL_ERROR);
         self.next_levels = Some((Vec::new(), Vec::new()));
@@ -84,6 +92,11 @@ impl SearchTreeState {
 
     pub fn extend(&mut self) {
         let (children, g_children) = self.next_levels.take().expect(INTERNAL_ERROR);
+        assert!(
+            !children.is_empty() && !g_children.is_empty(),
+            "{}",
+            INTERNAL_ERROR
+        );
         self.tree.push(children);
         self.tree.push(g_children);
     }
@@ -333,7 +346,8 @@ mod test {
             .push(vec![TreeEntry::new((-1, 0)), TreeEntry::new((1, 1))]);
 
         let data = ZeroOneGame::new(false, 4);
-        let mut stepper = EngineStepper::new(Engine::new_logging(2, data), type_mapping);
+        let mut engine = Engine::new_logging(2, data);
+        let mut stepper = EngineStepper::new(&mut engine, type_mapping);
 
         sts.new_levels();
         sts.for_each_leaf(&mut stepper, |tree_state, stepper, t_index| {

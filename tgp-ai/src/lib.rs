@@ -144,6 +144,7 @@ pub(crate) mod test {
         }
     }
 
+    #[derive(Debug, Clone, Copy)]
     pub(crate) struct RateAndMapZeroOne;
 
     impl RateAndMap<ZeroOneGame> for RateAndMapZeroOne {

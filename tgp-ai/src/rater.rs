@@ -1,4 +1,4 @@
-use std::{cmp::Ord, convert::TryFrom, slice};
+use std::{cmp::Ord, convert::TryFrom, ops::Index, slice, usize};
 
 use tgp::{
     engine::{Engine, EventListener, GameEngine, PendingDecision},
@@ -302,6 +302,57 @@ where
     }
 }
 
+pub fn translate<T: GameData, L: EventListener<T>, F>(
+    engine: &mut Engine<T, L>,
+    type_mapping: F,
+    index: IndexType,
+) -> Vec<usize>
+where
+    F: Fn(&T::Context) -> DecisionType,
+{
+    let index = usize::try_from(index).unwrap();
+    let (result, _) = translate_impl(engine, &type_mapping, index);
+    result.expect(INTERNAL_ERROR).into_iter().rev().collect()
+}
+
+pub fn translate_impl<T: GameData, L: EventListener<T>, F>(
+    engine: &mut Engine<T, L>,
+    type_mapping: &F,
+    index: usize,
+) -> (Option<Vec<usize>>, usize)
+where
+    F: Fn(&T::Context) -> DecisionType,
+{
+    let dec = pull_decision(engine);
+    let context = dec.context();
+    match type_mapping(&context) {
+        DecisionType::HigherLevel => {
+            let mut count = 0;
+            for i in 0..dec.option_count() {
+                pull_decision(engine).select_option(i);
+                let (result, add) = translate_impl(engine, type_mapping, index - count);
+                if let Some(mut list) = result {
+                    list.push(i);
+                    return (Some(list), 0);
+                }
+                count += add;
+                pull_decision(engine)
+                    .into_follow_up_decision()
+                    .expect(INTERNAL_ERROR)
+                    .retract();
+            }
+            (None, count)
+        }
+        DecisionType::BottomLevel => {
+            if index < dec.option_count() {
+                (Some(vec![index]), 0)
+            } else {
+                (None, dec.option_count())
+            }
+        }
+    }
+}
+
 fn pull_decision<T: GameData, L: EventListener<T>>(
     engine: &mut Engine<T, L>,
 ) -> PendingDecision<T, L> {
@@ -315,7 +366,10 @@ fn pull_decision<T: GameData, L: EventListener<T>>(
 mod test {
     use tgp::engine::Engine;
 
-    use crate::test::{type_mapping, ZeroOneContext, ZeroOneGame};
+    use crate::{
+        rater::translate,
+        test::{type_mapping, ZeroOneContext, ZeroOneGame},
+    };
 
     use super::Rater;
 
@@ -327,6 +381,24 @@ mod test {
 
         assert_eq!(rater.num_decisions(), 1);
         assert_eq!(rater.move_ratings.len(), 2);
+    }
+
+    #[test]
+    fn translate_test() {
+        let data = ZeroOneGame::new(false, 1);
+        let mut engine = Engine::new_logging(2, data);
+
+        assert_eq!(translate(&mut engine, type_mapping, 0), vec![0]);
+
+        let data = ZeroOneGame::new(true, 2);
+        let mut engine = Engine::new_logging(2, data);
+
+        assert_eq!(translate(&mut engine, type_mapping, 1), vec![0, 1]);
+
+        let data = ZeroOneGame::new(true, 2);
+        let mut engine = Engine::new_logging(2, data);
+
+        assert_eq!(translate(&mut engine, type_mapping, 3), vec![1, 1]);
     }
 
     #[test]

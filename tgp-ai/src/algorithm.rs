@@ -1,15 +1,18 @@
 use std::{cmp::Ordering, iter::FromIterator, marker::PhantomData};
 
-use tgp::{GameData, RevEffect};
+use tgp::{
+    engine::{logging::EventLog, CloneError, Engine, EventListener, GameEngine},
+    GameData, RevEffect,
+};
 
 use crate::{
     engine_stepper::EngineStepper,
-    rater::{DecisionType, Rater},
+    rater::{translate, DecisionType, Rater},
     search_tree_state::SearchTreeState,
     IndexType, Params, RatingType, INTERNAL_ERROR,
 };
 
-pub trait RateAndMap<T: GameData> {
+pub trait RateAndMap<T: GameData>: Clone {
     fn apply_type_mapping(&self, context: &T::Context) -> DecisionType;
 
     fn rate_moves(
@@ -28,13 +31,31 @@ pub trait RateAndMap<T: GameData> {
     ) -> RatingType;
 }
 
+// TODO: lift last part (i.e. only decide on subdecision)?
+/// To apply the min-max algorithm, the engine must be in pending decision state
+/// and the decision must be a top-level decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InvalidEngineState {
+    PendingEffect,
+    FollowUp,
+    Finished,
+}
+
+impl From<CloneError> for InvalidEngineState {
+    fn from(e: CloneError) -> Self {
+        match e {
+            CloneError::PendingEffect => InvalidEngineState::PendingEffect,
+            CloneError::FollowUp => InvalidEngineState::FollowUp,
+        }
+    }
+}
+
 pub struct MinMaxAlgorithm<T: GameData, R: RateAndMap<T>>
 where
     T::EffectType: RevEffect<T>,
 {
     params: Params,
     rate_and_map: R,
-    tree: SearchTreeState,
     _t: PhantomData<T>,
 }
 
@@ -46,9 +67,114 @@ where
         Self {
             params,
             rate_and_map,
-            tree: SearchTreeState::new(),
             _t: PhantomData,
         }
+    }
+
+    pub fn apply<L>(&mut self, engine: &mut Engine<T, L>, player: usize)
+    where
+        T: Clone,
+        L: EventListener<T>,
+    {
+        let (_, index_list) = self.run(engine, player).expect("Invalid engine state!");
+        for i in index_list {
+            match engine.pull() {
+                tgp::engine::GameState::PendingDecision(dec) => dec.select_option(i),
+                _ => panic!("{}", INTERNAL_ERROR),
+            }
+        }
+    }
+
+    pub fn run<L>(
+        &mut self,
+        engine: &Engine<T, L>,
+        player: usize,
+    ) -> Result<(RatingType, Vec<usize>), InvalidEngineState>
+    where
+        T: Clone,
+        L: EventListener<T>,
+    {
+        if engine.is_finished() {
+            return Err(InvalidEngineState::Finished);
+        }
+        let mut engine = engine.try_clone_with_listener(EventLog::new())?;
+        let ram = self.rate_and_map.clone();
+        let mut stepper =
+            EngineStepper::new(&mut engine, |context| ram.apply_type_mapping(context));
+
+        // calculate move
+        let mut tree = SearchTreeState::new();
+        for _ in 0..=(self.params.depth - self.params.first_cut_delay_depth) {
+            self.extend_search_tree(&mut stepper, &mut tree, player);
+            // TODO: prune
+        }
+
+        // return result
+        dbg!(tree.depth());
+        let (rating, index) = tree
+            .root_moves()
+            .max_by(|(r1, _), (r2, _)| r1.cmp(r2))
+            .expect(INTERNAL_ERROR);
+        Ok((
+            rating,
+            translate(
+                &mut engine,
+                |context| ram.apply_type_mapping(context),
+                index,
+            ),
+        ))
+    }
+
+    fn extend_search_tree<M>(
+        &mut self,
+        stepper: &mut EngineStepper<T, M>,
+        tree: &mut SearchTreeState,
+        player: usize,
+    ) where
+        M: Fn(&T::Context) -> DecisionType,
+    {
+        assert!(tree.depth() < 2 * self.params.depth);
+        let is_root = tree.depth() == 0;
+        tree.new_levels();
+        tree.for_each_leaf(stepper, |tree, stepper, t_index| {
+            let new_moves = if is_root {
+                let depth =
+                    self.params.first_cut_delay_depth + self.params.first_move_added_delay_depth;
+                let branch_limit = f32::ceil(
+                    self.params.limit_multiplier_first_move
+                        * self.params.branch_limit_first_cut as f32,
+                ) as usize;
+                let move_limit = f32::ceil(
+                    self.params.limit_multiplier_first_move * self.params.move_limit as f32,
+                ) as usize;
+                self.collect_recursive(
+                    depth,
+                    stepper,
+                    player,
+                    depth,
+                    self.params.branch_differences.surely_worse,
+                    branch_limit,
+                    self.params.move_differences.surely_worse,
+                    move_limit,
+                )
+            } else {
+                self.collect_recursive(
+                    self.params.first_cut_delay_depth,
+                    stepper,
+                    player,
+                    self.params.first_cut_delay_depth,
+                    self.params.branch_differences.probably_worse,
+                    self.params.branch_limit_first_cut,
+                    self.params.move_differences.probably_worse,
+                    self.params.move_limit,
+                )
+            };
+            for (rating, index, children) in new_moves {
+                tree.push_child(t_index, rating, index, children);
+            }
+        });
+        tree.extend();
+        tree.update_ratings();
     }
 
     fn collect_recursive<M>(
@@ -285,7 +411,8 @@ mod test {
         let params = Params::new(4, 4, 2, 2);
         let alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         let data = ZeroOneGame::new(false, 6);
-        let mut stepper = EngineStepper::new(Engine::new_logging(2, data), type_mapping);
+        let mut engine = Engine::new_logging(2, data);
+        let mut stepper = EngineStepper::new(&mut engine, type_mapping);
 
         assert_eq!(alg.min_max_rating(0, &mut stepper, 0), 0);
         assert_eq!(alg.min_max_rating(0, &mut stepper, 1), 0);
@@ -306,7 +433,8 @@ mod test {
         let params = Params::new(4, 4, 2, 2);
         let mut alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         let data = ZeroOneGame::new(false, 6);
-        let mut stepper = EngineStepper::new(Engine::new_logging(2, data), type_mapping);
+        let mut engine = Engine::new_logging(2, data);
+        let mut stepper = EngineStepper::new(&mut engine, type_mapping);
 
         assert_eq!(alg.collect_and_cut(0, &mut stepper, 0), (0, Vec::new()));
         assert_eq!(alg.collect_and_cut(0, &mut stepper, 1), (0, Vec::new()));
@@ -336,7 +464,8 @@ mod test {
         let params = Params::new(4, 4, 2, 2);
         let alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         let data = ZeroOneGame::new(false, 6);
-        let mut stepper = EngineStepper::new(Engine::new_logging(2, data), type_mapping);
+        let mut engine = Engine::new_logging(2, data);
+        let mut stepper = EngineStepper::new(&mut engine, type_mapping);
 
         assert_eq!(
             alg.collect_recursive(0, &mut stepper, 0, 2, 2, 2, 2, 4),

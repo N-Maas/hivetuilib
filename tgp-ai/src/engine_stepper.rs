@@ -11,17 +11,17 @@ use crate::{
 };
 
 // TODO: abstract over multiple decisions by same player? --> is probably hard
-pub(crate) struct EngineStepper<T: GameData, F>
+pub(crate) struct EngineStepper<'a, T: GameData, F>
 where
     T::EffectType: RevEffect<T>,
     F: Fn(&T::Context) -> DecisionType,
 {
-    engine: Engine<T, EventLog<T>>,
+    engine: &'a mut Engine<T, EventLog<T>>,
     decision_context: Vec<(T::Context, usize)>,
     type_mapping: F,
 }
 
-impl<T: GameData + Debug, F> Debug for EngineStepper<T, F>
+impl<T: GameData + Debug, F> Debug for EngineStepper<'_, T, F>
 where
     T::EffectType: RevEffect<T>,
     F: Fn(&T::Context) -> DecisionType,
@@ -31,12 +31,12 @@ where
     }
 }
 
-impl<T: GameData, F> EngineStepper<T, F>
+impl<'a, T: GameData, F> EngineStepper<'a, T, F>
 where
     T::EffectType: RevEffect<T>,
     F: Fn(&T::Context) -> DecisionType,
 {
-    pub fn new(engine: Engine<T, EventLog<T>>, type_mapping: F) -> Self {
+    pub fn new(engine: &'a mut Engine<T, EventLog<T>>, type_mapping: F) -> Self {
         Self {
             engine,
             decision_context: Vec::new(),
@@ -117,8 +117,8 @@ mod test {
     #[test]
     fn stepping_test() {
         let data = ZeroOneGame::new(false, 3);
-        let engine = Engine::new_logging(2, data);
-        let mut stepper = EngineStepper::new(engine, type_mapping);
+        let mut engine = Engine::new_logging(2, data);
+        let mut stepper = EngineStepper::new(&mut engine, type_mapping);
         assert!(!stepper.is_finished());
 
         stepper.forward_step(0);
