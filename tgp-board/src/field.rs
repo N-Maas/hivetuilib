@@ -6,6 +6,7 @@ use crate::{
         AdjacencyStructure, DirectionStructure, NeighborhoodStructure,
     },
     trait_definitions::{Board, BoardToMap},
+    IndexMap,
 };
 use std::{fmt::Debug, iter, mem};
 
@@ -132,7 +133,10 @@ where
     }
 }
 
-impl<'a, T, B: BoardToMap<T, Content = T>> Field<'a, Hypothetical<'a, T, B>> {
+impl<'a, B: Board, M: IndexMap<Item = B::Content>> Field<'a, Hypothetical<'a, B, M>>
+where
+    M: IndexMap<IndexType = B::Index, Item = B::Content>,
+{
     pub fn original_field<'b>(&self, board: &'b B) -> Field<'b, B> {
         Field::new(board, self.index).unwrap_or_else(|| {
             panic!(
