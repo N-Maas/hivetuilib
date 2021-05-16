@@ -146,7 +146,7 @@ impl<T: GameData + Debug, L: EventListener<T> + Debug> Debug for Engine<T, L> {
         };
         write!(
             f,
-            "Engine {{ state: {}, data: {:?}, listener: {:?}, num_players: {:?} }}",
+            "Engine {{ state: {}, data: {:#?}, listener: {:#?}, num_players: {:?} }}",
             state_str, &self.data, &self.listener, self.num_players
         )
     }

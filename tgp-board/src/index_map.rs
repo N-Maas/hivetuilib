@@ -1,4 +1,10 @@
-use std::{collections::HashMap, hash::Hash, mem, vec::IntoIter};
+use std::{
+    collections::HashMap,
+    fmt::{self, Debug},
+    hash::Hash,
+    mem,
+    vec::IntoIter,
+};
 
 use arrayvec::ArrayVec;
 
@@ -6,10 +12,19 @@ use crate::{Board, BoardIdxType, IndexMap};
 
 // TODO: efficient set for boards with normal indizes
 
-#[derive(Debug, PartialEq, Eq, Clone, Default)]
+#[derive(PartialEq, Eq, Clone, Default)]
 pub struct HashIndexMap<I: BoardIdxType + Hash, T = ()> {
     map: HashMap<I, T>,
     indizes: Vec<I>,
+}
+
+impl<I: BoardIdxType + Hash, T> Debug for HashIndexMap<I, T>
+where
+    T: Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "HashIndexMap {{ {:#?} }}", &self.map)
+    }
 }
 
 impl<I: BoardIdxType + Hash, T> HashIndexMap<I, T> {

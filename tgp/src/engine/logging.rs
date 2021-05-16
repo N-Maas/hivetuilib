@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 
 use crate::{GameData, RevEffect};
 
@@ -20,7 +20,7 @@ impl<T: GameData> Event<T> {
 }
 
 impl<T: GameData> Debug for Event<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Event::Effect(_) => {
                 write!(f, "Event::Effect(Box<_>)")
@@ -45,10 +45,10 @@ impl<T: GameData> Debug for EventLog<T>
 where
     T::EffectType: RevEffect<T>,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "EventLog: {{log: {:?}, redo_stack: {:?}}}",
+            "EventLog: {{log: {:#?}, redo_stack: {:#?}}}",
             &self.log, &self.redo_stack
         )
     }

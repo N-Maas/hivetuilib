@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 
 use crate::{
     new_effect, new_rev_effect, vec_context::VecContext, Decision, Effect, GameData, Outcome,
@@ -22,10 +22,10 @@ where
     C: Debug,
     I: Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "VecDecision {{ player: {:?}, context: {:?}, options.len(): {:?} }}",
+            "VecDecision {{ player: {:?}, context: {:#?}, options.len(): {:?} }}",
             self.player,
             &self.context,
             self.options.len()

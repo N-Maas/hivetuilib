@@ -8,7 +8,10 @@ use crate::{
     trait_definitions::{Board, BoardToMap},
     IndexMap,
 };
-use std::{fmt::Debug, iter, mem};
+use std::{
+    fmt::{self, Debug},
+    iter, mem,
+};
 
 #[derive(Eq)]
 pub struct Field<'a, B: Board> {
@@ -63,7 +66,7 @@ impl<'a, B: Board> Clone for Field<'a, B> {
 impl<'a, B: Board> Copy for Field<'a, B> {}
 
 impl<B: Board> Debug for Field<'_, B> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Field {{ index: {:?} }}", self.index)
     }
 }

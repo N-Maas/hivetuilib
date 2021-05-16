@@ -1,4 +1,7 @@
-use std::{convert::TryFrom, fmt::Debug};
+use std::{
+    convert::TryFrom,
+    fmt::{self, Debug},
+};
 
 use tgp::{
     engine::{logging::EventLog, Engine, GameEngine},
@@ -26,8 +29,8 @@ where
     T::EffectType: RevEffect<T>,
     F: Fn(&T::Context) -> DecisionType,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "EngineStepper {{ engine: {:?} }}", self.engine)
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "EngineStepper {{ engine: {:#?} }}", self.engine)
     }
 }
 

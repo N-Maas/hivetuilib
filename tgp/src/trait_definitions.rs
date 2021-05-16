@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 
 // TODO: better lifetime?
 // TODO: chained effect
@@ -21,7 +21,7 @@ pub enum Outcome<T: GameData> {
 }
 
 impl<T: GameData> Debug for Outcome<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Outcome::Effect(_) => {
                 write!(f, "Outcome::Effect")

@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 
 use crate::GameData;
 
@@ -48,7 +48,7 @@ impl<'a> AbstractPendingEffect<'a> {
 }
 
 impl<'a> Debug for AbstractPendingEffect<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "AbstractPendingEffect")
     }
 }
@@ -89,7 +89,7 @@ impl<'a> AbstractPendingDecision<'a> {
 }
 
 impl<'a> Debug for AbstractPendingDecision<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "AbstractPendingDecision")
     }
 }

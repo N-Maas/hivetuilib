@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 
 use crate::{new_effect, new_rev_effect, Decision, Effect, GameData, Outcome, RevEffect};
 
@@ -17,10 +17,10 @@ impl<T: GameData> Debug for PlainDecision<T>
 where
     T::Context: Clone + Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "PlainDecision {{ player: {:?}, context: {:?}, options.len(): {:?} }}",
+            "PlainDecision {{ player: {:?}, context: {:#?}, options.len(): {:?} }}",
             self.player,
             &self.context,
             self.options.len()
