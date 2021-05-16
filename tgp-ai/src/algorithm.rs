@@ -18,7 +18,8 @@ pub trait RateAndMap<T: GameData> {
     // TODO: player probably unnecessary
     fn rate_moves(
         &self,
-        rater: &mut Rater<T>,
+        rater: &mut Rater,
+        context: &[T::Context],
         data: &T,
         old_context: &[(T::Context, usize)],
         player: usize,
@@ -394,17 +395,18 @@ where
         stepper: &mut EngineStepper<T, M>,
         move_difference: RatingType,
         move_limit: usize,
-        rater_fn: fn(Rater<T>, RatingType) -> Vec<E>,
+        rater_fn: fn(Rater, RatingType) -> Vec<E>,
     ) -> Vec<E>
     where
         M: Fn(&T::Context) -> DecisionType,
     {
         let current_player = stepper.player();
-        let mut rater = Rater::new(stepper.engine(), |context| {
+        let (mut rater, context) = Rater::new(stepper.engine(), |context| {
             self.rate_and_map.apply_type_mapping(context)
         });
         self.rate_and_map.rate_moves(
             &mut rater,
+            &context,
             stepper.data(),
             stepper.decision_context(),
             current_player,

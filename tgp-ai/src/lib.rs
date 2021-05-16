@@ -155,13 +155,14 @@ pub(crate) mod test {
 
         fn rate_moves(
             &self,
-            rater: &mut Rater<ZeroOneGame>,
+            rater: &mut Rater,
+            context: &[ZeroOneContext],
             _data: &ZeroOneGame,
             _old_context: &[(ZeroOneContext, usize)],
             player: usize,
         ) {
-            for i in 0..rater.num_decisions() {
-                match rater.context(i) {
+            for (i, c) in context.iter().enumerate() {
+                match c {
                     ZeroOneContext::Flat => {
                         if player == 0 {
                             rater.rate(i, 0, 1);

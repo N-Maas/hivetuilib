@@ -22,20 +22,14 @@ enum Rating {
 }
 
 #[derive(Debug, Clone)]
-pub struct Rater<T: GameData> {
-    decisions: Vec<(T::Context, IndexType)>,
+pub struct Rater {
+    num_children: Vec<IndexType>,
     move_ratings: Vec<Rating>,
     max_rating: RatingType,
 }
-
-// TODO: not a great API due to borrowing conflict
-impl<T: GameData> Rater<T> {
-    pub fn context(&self, index: usize) -> &T::Context {
-        &self.decisions[index].0
-    }
-
+impl Rater {
     pub fn num_decisions(&self) -> usize {
-        self.decisions.len()
+        self.num_children.len()
     }
 
     pub fn current_max(&self) -> RatingType {
@@ -85,37 +79,37 @@ impl<T: GameData> Rater<T> {
         self.move_ratings[target] = Rating::Equivalency(own_index);
     }
 
-    pub fn iter(&self) -> Iter<T> {
-        Iter {
-            iter: self.decisions.iter(),
-        }
-    }
-
-    pub(crate) fn new<F, L: EventListener<T>>(engine: &mut Engine<T, L>, type_mapping: F) -> Self
+    pub(crate) fn new<T: GameData, F, L: EventListener<T>>(
+        engine: &mut Engine<T, L>,
+        type_mapping: F,
+    ) -> (Self, Vec<T::Context>)
     where
         F: Fn(&T::Context) -> DecisionType,
     {
         let mut decisions = Vec::new();
+        let mut num_children = Vec::new();
         let mut move_ratings = Vec::new();
         let mut start = 0;
         for_each_decision_flat(engine, type_mapping, |dec, context| {
             let option_count = dec.option_count();
             start += option_count;
-            decisions.push((
-                context,
-                IndexType::try_from(start).expect("Too large index caused overflow."),
-            ));
+            decisions.push(context);
+            num_children
+                .push(IndexType::try_from(start).expect("Too large index caused overflow."));
             for _ in 0..option_count {
                 move_ratings.push(Rating::None);
             }
             // always continue the iteration
             false
         });
-        Self {
+        (
+            Self {
+                num_children,
+                move_ratings,
+                max_rating: RatingType::MIN,
+            },
             decisions,
-            move_ratings,
-            max_rating: RatingType::MIN,
-        }
+        )
     }
 
     /// The result is sorted in decreasing order.
@@ -198,7 +192,7 @@ impl<T: GameData> Rater<T> {
         if dec_index == 0 {
             0
         } else {
-            usize::try_from(self.decisions[dec_index - 1].1).unwrap()
+            usize::try_from(self.num_children[dec_index - 1]).unwrap()
         }
     }
 
@@ -218,7 +212,7 @@ impl<T: GameData> Rater<T> {
 
     fn to_move_index(&self, dec_index: usize, option_index: usize) -> usize {
         let start = self.moves_start_index(dec_index);
-        assert!(start + option_index < usize::try_from(self.decisions[dec_index].1).unwrap());
+        assert!(start + option_index < usize::try_from(self.num_children[dec_index]).unwrap());
         start + option_index
     }
 
@@ -377,7 +371,7 @@ mod test {
     fn basic_test() {
         let data = ZeroOneGame::new(false, 1);
         let mut engine = Engine::new_logging(2, data);
-        let rater = Rater::new(&mut engine, type_mapping);
+        let (rater, _) = Rater::new(&mut engine, type_mapping);
 
         assert_eq!(rater.num_decisions(), 1);
         assert_eq!(rater.move_ratings.len(), 2);
@@ -405,11 +399,11 @@ mod test {
     fn two_level_test() {
         let data = ZeroOneGame::new(true, 2);
         let mut engine = Engine::new_logging(2, data);
-        let rater = Rater::new(&mut engine, type_mapping);
+        let (rater, c) = Rater::new(&mut engine, type_mapping);
 
         assert_eq!(rater.num_decisions(), 2);
-        assert_eq!(rater.decisions[0].0, ZeroOneContext::ZeroAnd);
-        assert_eq!(rater.decisions[1].0, ZeroOneContext::OneAnd);
+        assert_eq!(c[0], ZeroOneContext::ZeroAnd);
+        assert_eq!(c[1], ZeroOneContext::OneAnd);
         assert_eq!(rater.move_ratings.len(), 4);
     }
 
@@ -418,7 +412,7 @@ mod test {
         let data = ZeroOneGame::new(true, 1);
         let mut engine = Engine::new_logging(2, data);
 
-        let mut rater = Rater::new(&mut engine, type_mapping);
+        let (mut rater, _) = Rater::new(&mut engine, type_mapping);
         rater.rate(0, 0, 0);
         rater.rate(0, 1, 3);
         rater.rate(1, 0, 2);
@@ -426,7 +420,7 @@ mod test {
         let result = rater.cut_and_sort(1);
         assert_eq!(result, vec![(3, 1), (2, 2), (1, 3)]);
 
-        let mut rater = Rater::new(&mut engine, type_mapping);
+        let (mut rater, _) = Rater::new(&mut engine, type_mapping);
         rater.rate(0, 0, 0);
         rater.rate(0, 1, 1);
         rater.set_equivalent_to(1, 0, 0, 1);
