@@ -5,7 +5,7 @@ use tgp::{
     GameData,
 };
 
-use crate::{IndexType, RatingType, INTERNAL_ERROR};
+use crate::{IndexType, RateAndMap, RatingType, INTERNAL_ERROR};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DecisionType {
@@ -23,13 +23,14 @@ enum Rating {
 
 #[derive(Debug, Clone)]
 pub struct Rater {
-    num_children: Vec<IndexType>,
+    start_index: Vec<IndexType>,
     move_ratings: Vec<Rating>,
     max_rating: RatingType,
 }
+
 impl Rater {
     pub fn num_decisions(&self) -> usize {
-        self.num_children.len()
+        self.start_index.len() - 1
     }
 
     pub fn current_max(&self) -> RatingType {
@@ -79,6 +80,44 @@ impl Rater {
         self.move_ratings[target] = Rating::Equivalency(own_index);
     }
 
+    /// exists primarily for testing purposes
+    pub fn create_rating<T: GameData, L: EventListener<T>, R: RateAndMap<T>>(
+        engine: &mut Engine<T, L>,
+        r_a_m: &R,
+    ) -> Vec<(RatingType, usize, T::Context)>
+    where
+        T::Context: Clone,
+    {
+        let (mut rater, context_list) = Self::new(engine, |c| r_a_m.apply_type_mapping(c));
+        r_a_m.rate_moves(&mut rater, &context_list, engine.data(), &[]);
+        // extract the results
+        let min = rater
+            .move_ratings
+            .iter()
+            .filter_map(|&r| match r {
+                Rating::Value(val) => Some(val),
+                Rating::Equivalency(_) => None,
+                Rating::Moved(_) => unreachable!(),
+                Rating::None => panic!("Move not rated!"),
+            })
+            .min()
+            .unwrap();
+        let start_index = rater.start_index.clone();
+        let result = rater.cut_and_sort(min);
+        result
+            .into_iter()
+            .map(|(rating, index)| {
+                for (i, c) in context_list.iter().enumerate() {
+                    if index < start_index[i + 1] {
+                        let dec_index = usize::try_from(index - start_index[i]).unwrap();
+                        return (rating, dec_index, c.clone());
+                    }
+                }
+                unreachable!();
+            })
+            .collect()
+    }
+
     pub(crate) fn new<T: GameData, F, L: EventListener<T>>(
         engine: &mut Engine<T, L>,
         type_mapping: F,
@@ -87,15 +126,14 @@ impl Rater {
         F: Fn(&T::Context) -> DecisionType,
     {
         let mut decisions = Vec::new();
-        let mut num_children = Vec::new();
+        let mut start_index = vec![0];
         let mut move_ratings = Vec::new();
         let mut start = 0;
         for_each_decision_flat(engine, type_mapping, |dec, context| {
             let option_count = dec.option_count();
             start += option_count;
             decisions.push(context);
-            num_children
-                .push(IndexType::try_from(start).expect("Too large index caused overflow."));
+            start_index.push(IndexType::try_from(start).expect("Too large index caused overflow."));
             for _ in 0..option_count {
                 move_ratings.push(Rating::None);
             }
@@ -104,7 +142,7 @@ impl Rater {
         });
         (
             Self {
-                num_children,
+                start_index,
                 move_ratings,
                 max_rating: RatingType::MIN,
             },
@@ -189,11 +227,7 @@ impl Rater {
     }
 
     fn moves_start_index(&self, dec_index: usize) -> usize {
-        if dec_index == 0 {
-            0
-        } else {
-            usize::try_from(self.num_children[dec_index - 1]).unwrap()
-        }
+        usize::try_from(self.start_index[dec_index]).unwrap()
     }
 
     fn set_rating(&mut self, dec_index: usize, option_index: usize, value: Rating) {
@@ -212,7 +246,7 @@ impl Rater {
 
     fn to_move_index(&self, dec_index: usize, option_index: usize) -> usize {
         let start = self.moves_start_index(dec_index);
-        assert!(start + option_index < usize::try_from(self.num_children[dec_index]).unwrap());
+        assert!(start + option_index < usize::try_from(self.start_index[dec_index + 1]).unwrap());
         start + option_index
     }
 

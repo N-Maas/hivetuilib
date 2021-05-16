@@ -157,14 +157,13 @@ pub(crate) mod test {
             &self,
             rater: &mut Rater,
             context: &[ZeroOneContext],
-            _data: &ZeroOneGame,
+            data: &ZeroOneGame,
             _old_context: &[(ZeroOneContext, usize)],
-            player: usize,
         ) {
             for (i, c) in context.iter().enumerate() {
                 match c {
                     ZeroOneContext::Flat => {
-                        if player == 0 {
+                        if data.player == 0 {
                             rater.rate(i, 0, 1);
                             rater.rate(i, 1, 0);
                         } else {
@@ -173,7 +172,7 @@ pub(crate) mod test {
                         }
                     }
                     ZeroOneContext::ZeroAnd => {
-                        if player == 0 {
+                        if data.player == 0 {
                             rater.rate(i, 0, 2);
                             rater.rate(i, 1, 0);
                         } else {
@@ -182,7 +181,7 @@ pub(crate) mod test {
                         }
                     }
                     ZeroOneContext::OneAnd => {
-                        if player == 0 {
+                        if data.player == 0 {
                             rater.rate(i, 0, 0);
                             rater.rate(i, 1, -2);
                         } else {

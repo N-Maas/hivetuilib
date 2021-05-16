@@ -15,14 +15,12 @@ use crate::{
 pub trait RateAndMap<T: GameData> {
     fn apply_type_mapping(&self, context: &T::Context) -> DecisionType;
 
-    // TODO: player probably unnecessary
     fn rate_moves(
         &self,
         rater: &mut Rater,
         context: &[T::Context],
         data: &T,
         old_context: &[(T::Context, usize)],
-        player: usize,
     );
 
     // TODO: player probably unnecessary
@@ -400,7 +398,6 @@ where
     where
         M: Fn(&T::Context) -> DecisionType,
     {
-        let current_player = stepper.player();
         let (mut rater, context) = Rater::new(stepper.engine(), |context| {
             self.rate_and_map.apply_type_mapping(context)
         });
@@ -409,7 +406,6 @@ where
             &context,
             stepper.data(),
             stepper.decision_context(),
-            current_player,
         );
         let min = rater.current_max() - move_difference;
         let mut result = rater_fn(rater, min);
