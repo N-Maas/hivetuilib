@@ -69,7 +69,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingTree<'
         self.base_set.contains(el.into())
     }
 
-    pub fn iter_paths(&self) -> PathIter<M, B> {
+    pub fn iter_paths<'b>(&'b self) -> PathIter<'a, 'b, M, B> {
         PathIter {
             inner: self.open_paths.iter(),
             searching_tree: self,
@@ -194,6 +194,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingTree<'
     // retain paths, reopen_all_paths, iter_fields, ..
     // reopen_roots?
     // perform_dfs
+    // into_iter methods
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -203,13 +204,15 @@ pub enum SearchMode {
     AnyFields,
 }
 
-pub struct PathIter<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
-    inner: Iter<'a, (usize, usize)>,
-    searching_tree: &'a SearchingTree<'a, M, B>,
+pub struct PathIter<'a, 'b, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
+    inner: Iter<'b, (usize, usize)>,
+    searching_tree: &'b SearchingTree<'a, M, B>,
 }
 
-impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator for PathIter<'a, M, B> {
-    type Item = Path<'a, M, B>;
+impl<'a, 'b, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator
+    for PathIter<'a, 'b, M, B>
+{
+    type Item = Path<'a, 'b, M, B>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner
@@ -222,21 +225,21 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator for Pa
     }
 }
 
-impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> ExactSizeIterator
-    for PathIter<'a, M, B>
+impl<M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> ExactSizeIterator
+    for PathIter<'_, '_, M, B>
 {
 }
 
 // ----- implementation of the Path API for a SearchingTree ----
 
 #[derive(Debug, Eq)]
-pub struct Path<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
+pub struct Path<'a, 'b, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
     tree_index: usize,
     length: usize,
-    searching_tree: &'a SearchingTree<'a, M, B>,
+    searching_tree: &'b SearchingTree<'a, M, B>,
 }
 
-impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Path<'a, M, B> {
+impl<'a, 'b, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Path<'a, 'b, M, B> {
     pub fn len(&self) -> usize {
         self.length
     }
@@ -245,7 +248,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Path<'a, M, B> 
         self.length == 0
     }
 
-    pub fn searching_tree(&self) -> &'a SearchingTree<'a, M, B> {
+    pub fn searching_tree(&self) -> &'b SearchingTree<'a, M, B> {
         self.searching_tree
     }
 
@@ -261,7 +264,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Path<'a, M, B> 
         self.searching_tree.board.get_field(index).unwrap()
     }
 
-    pub fn iter_points(&self) -> PointIter<'a, M, B> {
+    pub fn iter_points(&self) -> PointIter<'a, 'b, M, B> {
         PointIter {
             inner: self.iter_subpaths(),
         }
@@ -296,13 +299,13 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Path<'a, M, B> 
         }
     }
 
-    pub fn iter_subpaths(&self) -> IterSubpaths<'a, M, B> {
+    pub fn iter_subpaths(&self) -> IterSubpaths<'a, 'b, M, B> {
         IterSubpaths {
             current: Some(*self),
         }
     }
 
-    fn new(tree_index: usize, length: usize, searching_tree: &'a SearchingTree<'a, M, B>) -> Self {
+    fn new(tree_index: usize, length: usize, searching_tree: &'b SearchingTree<'a, M, B>) -> Self {
         let result = Self {
             tree_index,
             length,
@@ -320,13 +323,13 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Path<'a, M, B> 
     }
 }
 
-impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> PartialEq for Path<'a, M, B> {
+impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> PartialEq for Path<'a, '_, M, B> {
     fn eq(&self, other: &Self) -> bool {
         self.tree_index == other.tree_index && self.length == other.length
     }
 }
 
-impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Clone for Path<'a, M, B> {
+impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Clone for Path<'a, '_, M, B> {
     fn clone(&self) -> Self {
         Self {
             tree_index: self.tree_index,
@@ -336,17 +339,17 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Clone for Path<
     }
 }
 
-impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Copy for Path<'a, M, B> {}
+impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Copy for Path<'a, '_, M, B> {}
 
 #[derive(Debug, Clone)]
-pub struct IterSubpaths<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
-    current: Option<Path<'a, M, B>>,
+pub struct IterSubpaths<'a, 'b, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
+    current: Option<Path<'a, 'b, M, B>>,
 }
 
-impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator
-    for IterSubpaths<'a, M, B>
+impl<'a, 'b, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator
+    for IterSubpaths<'a, 'b, M, B>
 {
-    type Item = Path<'a, M, B>;
+    type Item = Path<'a, 'b, M, B>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let result = self.current;
@@ -360,17 +363,19 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator
     }
 }
 
-impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> ExactSizeIterator
-    for IterSubpaths<'a, M, B>
+impl<M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> ExactSizeIterator
+    for IterSubpaths<'_, '_, M, B>
 {
 }
 
 #[derive(Debug, Clone)]
-pub struct PointIter<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
-    inner: IterSubpaths<'a, M, B>,
+pub struct PointIter<'a, 'b, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
+    inner: IterSubpaths<'a, 'b, M, B>,
 }
 
-impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator for PointIter<'a, M, B> {
+impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator
+    for PointIter<'a, '_, M, B>
+{
     type Item = Field<'a, B>;
 
     fn next(&mut self) -> Option<Self::Item> {
