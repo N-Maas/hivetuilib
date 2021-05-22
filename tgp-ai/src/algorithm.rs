@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, marker::PhantomData};
+use std::{cmp::Ordering, marker::PhantomData, fmt::Debug};
 
 use tgp::{
     engine::{logging::EventLog, CloneError, Engine, EventListener, GameEngine},
@@ -96,13 +96,67 @@ where
         T: Clone,
         L: EventListener<T>,
     {
-        self.params.integrity_check();
-
         if engine.is_finished() {
             return Err(InvalidEngineState::Finished);
         }
         let mut engine = engine.try_clone_with_listener(EventLog::new())?;
-        let mut stepper = EngineStepper::new(&mut engine, |context| {
+
+        let ratings = self.calculate_ratings(&mut engine)?;
+        let (rating, index) = ratings
+            .into_iter()
+            .max_by(|(r1, _), (r2, _)| r1.cmp(r2))
+            .expect(INTERNAL_ERROR);
+
+        // return result
+        Ok((
+            rating,
+            translate(
+                &mut engine,
+                |context| self.rate_and_map.apply_type_mapping(context),
+                index,
+            ),
+        ))
+    }
+
+    pub fn run_all_ratings<L>(
+        &self,
+        engine: &Engine<T, L>,
+    ) -> Result<Vec<(RatingType, Vec<usize>)>, InvalidEngineState>
+    where
+        T: Clone,
+        L: EventListener<T>,
+    {
+        if engine.is_finished() {
+            return Err(InvalidEngineState::Finished);
+        }
+        let mut engine = engine.try_clone_with_listener(EventLog::new())?;
+
+        let ratings = self.calculate_ratings(&mut engine)?;
+        let result = ratings
+            .into_iter()
+            .map(|(r, index)| {
+                (
+                    r,
+                    translate(
+                        &mut engine,
+                        |context| self.rate_and_map.apply_type_mapping(context),
+                        index,
+                    ),
+                )
+            })
+            .collect();
+        Ok(result)
+    }
+
+    fn calculate_ratings(
+        &self,
+        engine: &mut Engine<T, EventLog<T>>,
+    ) -> Result<Vec<(RatingType, IndexType)>, InvalidEngineState>
+    where
+        T: Clone,
+    {
+        self.params.integrity_check();
+        let mut stepper = EngineStepper::new(engine, |context| {
             self.rate_and_map.apply_type_mapping(context)
         });
         let player = stepper.player();
@@ -118,22 +172,7 @@ where
             self.extend_search_tree(&mut stepper, &mut tree, player);
             // TODO: prune
         }
-        dbg!(&tree);
-        let (rating, index) = dbg!(tree
-            .root_moves()
-            .max_by(|(r1, _), (r2, _)| r1.cmp(r2))
-            .expect(INTERNAL_ERROR));
-
-        // return result
-        dbg!(tree.depth());
-        Ok((
-            rating,
-            translate(
-                &mut engine,
-                |context| self.rate_and_map.apply_type_mapping(context),
-                index,
-            ),
-        ))
+        Ok(tree.root_moves().collect::<Vec<_>>())
     }
 
     fn extend_search_tree<M>(
@@ -190,7 +229,6 @@ where
             }
         });
         tree.extend();
-        dbg!(&tree);
         tree.update_ratings();
     }
 
@@ -388,7 +426,7 @@ where
     }
 
     #[inline]
-    fn create_move_ratings<M, E: Ord>(
+    fn create_move_ratings<M, E: Ord + Debug>(
         &self,
         stepper: &mut EngineStepper<T, M>,
         move_difference: RatingType,
@@ -409,7 +447,6 @@ where
         );
         let min = rater.current_max() - move_difference;
         let mut result = rater_fn(rater, min);
-        debug_assert!(result.first().unwrap() >= result.last().unwrap());
         if result.len() > self.params.move_limit {
             // TODO: Clustering
             result.truncate(move_limit);
@@ -430,7 +467,7 @@ mod test {
 
     #[test]
     fn min_max_test() {
-        let params = Params::new(4, 4, 2, 2);
+        let params = Params::new(4, 4, 4, 2, 2);
         let alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         let data = ZeroOneGame::new(false, 6);
         let mut engine = Engine::new_logging(2, data);
@@ -452,7 +489,7 @@ mod test {
 
     #[test]
     fn collect_and_cut_test() {
-        let params = Params::new(4, 4, 2, 2);
+        let params = Params::new(4, 4, 4, 2, 2);
         let mut alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         let data = ZeroOneGame::new(false, 6);
         let mut engine = Engine::new_logging(2, data);
@@ -483,7 +520,7 @@ mod test {
 
     #[test]
     fn collect_recursive_test() {
-        let params = Params::new(4, 4, 2, 2);
+        let params = Params::new(4, 4, 4, 2, 2);
         let alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         let data = ZeroOneGame::new(false, 6);
         let mut engine = Engine::new_logging(2, data);
@@ -531,7 +568,7 @@ mod test {
 
     #[test]
     fn run_test() {
-        let params = Params::new(1, 4, 2, 2);
+        let params = Params::new(1, 4, 4, 2, 2);
         let mut alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         alg.params.first_cut_delay_depth = 1;
         let data = ZeroOneGame::new(true, 8);

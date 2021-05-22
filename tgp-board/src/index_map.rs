@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     fmt::{self, Debug},
     hash::Hash,
     mem,
@@ -7,6 +6,7 @@ use std::{
 };
 
 use arrayvec::ArrayVec;
+use hashbrown::HashMap;
 
 use crate::{Board, BoardIdxType, IndexMap};
 

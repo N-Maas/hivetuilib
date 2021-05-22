@@ -36,6 +36,7 @@ impl Params {
     pub fn new(
         depth: usize,
         branch_limit: usize,
+        move_limit: usize,
         branch_difference_probable: RatingType,
         move_difference_probable: RatingType,
     ) -> Self {
@@ -48,7 +49,7 @@ impl Params {
             first_move_added_delay_depth: 0,
             tail_to_first_cut_depth: 2,
             branch_differences: DifferenceParams::new(branch_difference_probable),
-            move_limit: 2 * branch_limit,
+            move_limit,
             move_differences: DifferenceParams::new(move_difference_probable),
         }
     }

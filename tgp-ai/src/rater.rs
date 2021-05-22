@@ -1,9 +1,6 @@
-use std::{cmp::Ord, convert::TryFrom, slice, usize};
+use std::{cmp::Ord, convert::TryFrom, slice, time::Instant, usize};
 
-use tgp::{
-    engine::{Engine, EventListener, GameEngine, PendingDecision},
-    GameData,
-};
+use tgp::{GameData, engine::{Engine, EventListener, GameEngine, GameState, PendingDecision}};
 
 use crate::{IndexType, RateAndMap, RatingType, INTERNAL_ERROR};
 
@@ -104,7 +101,7 @@ impl Rater {
             .unwrap();
         let start_index = rater.start_index.clone();
         let result = rater.cut_and_sort(min);
-        result
+        let result = result
             .into_iter()
             .map(|(rating, index)| {
                 for (i, c) in context_list.iter().enumerate() {
@@ -115,7 +112,8 @@ impl Rater {
                 }
                 unreachable!();
             })
-            .collect()
+            .collect();
+        result
     }
 
     pub(crate) fn new<T: GameData, F, L: EventListener<T>>(
@@ -308,18 +306,18 @@ where
     F: Fn(&T::Context) -> DecisionType,
     A: FnMut(&PendingDecision<T, L>, T::Context) -> bool,
 {
-    let dec = pull_decision(engine);
+    let dec = pull_decision(engine, "Internal error - type mapping invalid?");
     let context = dec.context();
     match type_mapping(&context) {
         DecisionType::HigherLevel => {
             let option_count = dec.option_count();
             for i in 0..option_count {
-                pull_decision(engine).select_option(i);
+                pull_decision(engine, INTERNAL_ERROR).select_option(i);
                 let stop = for_each_decision_flat_impl(engine, type_mapping, apply);
                 if stop {
                     return true;
                 }
-                pull_decision(engine)
+                pull_decision(engine, INTERNAL_ERROR)
                     .into_follow_up_decision()
                     .expect(INTERNAL_ERROR)
                     .retract();
@@ -340,6 +338,14 @@ where
 {
     let index = usize::try_from(index).unwrap();
     let (result, _) = translate_impl(engine, &type_mapping, index);
+    match engine.pull() {
+        GameState::PendingDecision(dec) => {
+            if let Some(fu) = dec.into_follow_up_decision() {
+                fu.retract_all();
+            }
+        }
+        _ => {}
+    }
     result.expect(INTERNAL_ERROR).into_iter().rev().collect()
 }
 
@@ -351,22 +357,22 @@ pub fn translate_impl<T: GameData, L: EventListener<T>, F>(
 where
     F: Fn(&T::Context) -> DecisionType,
 {
-    let dec = pull_decision(engine);
+    let dec = pull_decision(engine, "Internal error - type mapping invalid?");
     let context = dec.context();
     match type_mapping(&context) {
         DecisionType::HigherLevel => {
             let mut count = 0;
             for i in 0..dec.option_count() {
-                pull_decision(engine).select_option(i);
+                pull_decision(engine, INTERNAL_ERROR).select_option(i);
                 let (result, add) = translate_impl(engine, type_mapping, index - count);
                 if let Some(mut list) = result {
                     list.push(i);
                     return (Some(list), 0);
                 }
                 count += add;
-                pull_decision(engine)
+                pull_decision(engine, INTERNAL_ERROR)
                     .into_follow_up_decision()
-                    .expect(INTERNAL_ERROR)
+                    .expect("Internal error - type mapping invalid?")
                     .retract();
             }
             (None, count)
@@ -381,12 +387,13 @@ where
     }
 }
 
-fn pull_decision<T: GameData, L: EventListener<T>>(
-    engine: &mut Engine<T, L>,
-) -> PendingDecision<T, L> {
+fn pull_decision<'a, T: GameData, L: EventListener<T>>(
+    engine: &'a mut Engine<T, L>,
+    error: &str,
+) -> PendingDecision<'a, T, L> {
     match engine.pull() {
-        tgp::engine::GameState::PendingDecision(dec) => dec,
-        _ => panic!("{}", INTERNAL_ERROR),
+        GameState::PendingDecision(dec) => dec,
+        _ => panic!("{}", error),
     }
 }
 

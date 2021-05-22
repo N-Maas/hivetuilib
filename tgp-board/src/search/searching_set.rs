@@ -88,6 +88,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
     }
 
     // ----- the search API -----
+    /// Returns true, if at least one field was added.
     pub fn extend<F>(&mut self, map_fields: F) -> bool
     where
         F: FnMut(Field<B>) -> FieldSearchResult<B::Index>,
@@ -95,7 +96,9 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         self.extend_helper(Self::apply_mapping(self.iter(), map_fields))
     }
 
-    /// The closure must not use interior mutability.
+    /// Returns true, if at least one field was added.
+    ///
+    /// Note: The closure must not use interior mutability.
     pub fn extend_repeated<F>(&mut self, map_fields: F) -> bool
     where
         F: Fn(Field<B>) -> FieldSearchResult<B::Index>,
@@ -122,6 +125,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         }
     }
 
+    /// Returns true, if at least one field was added.
     pub fn extend_with<F>(&mut self, collect: F) -> bool
     where
         F: FnOnce(&Self) -> FieldSearchResult<B::Index>,
@@ -129,6 +133,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         self.extend_helper(collect(self))
     }
 
+    /// Returns true, if at least one field was added.
     pub fn extend_with_repeated<F>(&mut self, mut collect: F) -> bool
     where
         F: FnMut(&Self) -> FieldSearchResult<B::Index>,
@@ -140,6 +145,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         success
     }
 
+    /// Returns true, if at least one field was added.
     pub fn grow<F>(&mut self, predicate: F) -> bool
     where
         F: Fn(Field<B>) -> bool,
@@ -148,6 +154,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         self.extend_helper(self.apply_growth(predicate))
     }
 
+    /// Returns true, if at least one field was added.
     pub fn grow_repeated<F>(&mut self, predicate: F) -> bool
     where
         F: Fn(Field<B>) -> bool,
@@ -218,8 +225,9 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
     fn extend_helper(&mut self, fields: FieldSearchResult<B::Index>) -> bool {
         let mut success = false;
         for i in fields.iter() {
-            self.base_insert(i);
-            success = true;
+            if self.base_insert(i) {
+                success = true;
+            }
         }
         success
     }

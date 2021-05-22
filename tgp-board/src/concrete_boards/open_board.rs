@@ -8,6 +8,7 @@ use crate::{
 use std::{
     cmp::Ordering,
     collections::VecDeque,
+    fmt::{self, Debug, Display},
     iter, mem,
     ops::{Add, Index, IndexMut, Sub},
 };
@@ -240,6 +241,12 @@ impl<T, S, E> BoardToMap<E> for OpenBoard<T, S> {
 pub struct OpenIndex {
     pub x: isize,
     pub y: isize,
+}
+
+impl Display for OpenIndex {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        (self.x, self.y).fmt(f)
+    }
 }
 
 impl BoardIdxType for OpenIndex {}
