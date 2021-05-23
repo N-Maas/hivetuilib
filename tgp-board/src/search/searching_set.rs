@@ -59,6 +59,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         self.board
     }
 
+    // the number of contained fields
     pub fn size(&self) -> usize {
         self.base_set.size()
     }

@@ -179,12 +179,12 @@ impl<T: GameData, L: EventListener<T>> Engine<T, L> {
     fn fetch_next_state(&self) -> InternalState<T> {
         match self.data.next_decision() {
             Some(decision) => {
-                debug_assert!(
+                assert!(
                     decision.player() < self.num_players,
                     "Illegal player for decision: {:?}",
                     decision.player()
                 );
-                debug_assert!(
+                assert!(
                     decision.option_count() > 0,
                     "At least one possible option per decision required!"
                 );

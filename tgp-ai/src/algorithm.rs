@@ -51,7 +51,7 @@ impl From<CloneError> for InvalidEngineState {
     }
 }
 
-pub struct MinMaxAlgorithm<T: GameData, R: RateAndMap<T>>
+pub struct MinMaxAlgorithm<T: GameData + Debug, R: RateAndMap<T>>
 where
     T::EffectType: RevEffect<T>,
 {
@@ -62,7 +62,7 @@ where
 
 type RatingList = Vec<(RatingType, Box<[IndexType]>)>;
 
-impl<T: GameData, R: RateAndMap<T>> MinMaxAlgorithm<T, R>
+impl<T: GameData + Debug, R: RateAndMap<T>> MinMaxAlgorithm<T, R>
 where
     T::EffectType: RevEffect<T>,
 {
@@ -198,6 +198,7 @@ where
                 tree.push_child(t_index, rating, index, children);
             }
         });
+        // TODO: end of game handling
         tree.extend();
         tree.update_ratings();
     }
@@ -284,14 +285,7 @@ where
         player: usize,
     ) -> (RatingType, RatingList) {
         if depth == 0 || stepper.is_finished() {
-            return (
-                self.rate_and_map.rate_game_state(
-                    stepper.data(),
-                    stepper.decision_context(),
-                    player,
-                ),
-                Vec::new(),
-            );
+            return (self.final_rating(depth, stepper, player), Vec::new());
         }
 
         let is_own_turn = stepper.player() == player;
@@ -362,11 +356,7 @@ where
         player: usize,
     ) -> RatingType {
         if depth == 0 || stepper.is_finished() {
-            return self.rate_and_map.rate_game_state(
-                stepper.data(),
-                stepper.decision_context(),
-                player,
-            );
+            return self.final_rating(depth, stepper, player);
         }
 
         let is_own_turn = stepper.player() == player;
@@ -389,6 +379,22 @@ where
         }
     }
 
+    fn final_rating(
+        &self,
+        depth: usize,
+        stepper: &mut EngineStepper<T>,
+        player: usize,
+    ) -> RatingType {
+        let val =
+            self.rate_and_map
+                .rate_game_state(stepper.data(), stepper.decision_context(), player);
+        if stepper.is_finished() {
+            RatingType::try_from(depth + 1).unwrap() * val
+        } else {
+            val
+        }
+    }
+
     #[inline]
     fn create_move_ratings<E: Ord + Debug>(
         &self,
@@ -408,6 +414,7 @@ where
         );
         let min = rater.current_max() - move_difference;
         let mut result = rater_fn(rater, min);
+        assert!(!result.is_empty());
         if result.len() > self.params.move_limit {
             // TODO: Clustering
             result.truncate(move_limit);
@@ -448,8 +455,8 @@ mod test {
         assert_eq!(alg.min_max_rating(3, &mut stepper, 1), 0);
         assert_eq!(alg.min_max_rating(4, &mut stepper, 0), -4);
         assert_eq!(alg.min_max_rating(4, &mut stepper, 1), 4);
-        assert_eq!(alg.min_max_rating(6, &mut stepper, 0), -4);
-        assert_eq!(alg.min_max_rating(6, &mut stepper, 1), 4);
+        assert_eq!(alg.min_max_rating(6, &mut stepper, 0), -12);
+        assert_eq!(alg.min_max_rating(6, &mut stepper, 1), 12);
     }
 
     #[test]

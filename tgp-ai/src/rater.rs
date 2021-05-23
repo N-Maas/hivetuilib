@@ -153,6 +153,7 @@ impl Rater {
     /// The result is sorted in decreasing order.
     pub(crate) fn cut_and_sort(self, min: RatingType) -> Vec<(RatingType, Box<[IndexType]>)> {
         let mut result = Vec::new();
+        assert!(!self.move_ratings.is_empty());
         for i in 0..self.num_decisions() {
             let start = self.start_index[i];
             let range = self.start_index[i + 1] - start;
@@ -202,8 +203,7 @@ impl Rater {
         min: RatingType,
         result: &mut Vec<(RatingType, Box<[IndexType]>, Vec<Box<[IndexType]>>)>,
     ) {
-        let start = usize::try_from(self.start_index[i]).unwrap();
-        let index = start + usize::try_from(j).unwrap();
+        let index = self.to_move_index(i, usize::try_from(j).unwrap());
         let rating = &mut self.move_ratings[index];
         match *rating {
             Rating::Value(val) => {
@@ -216,7 +216,8 @@ impl Rater {
                 }
             }
             Rating::Equivalency(target) => {
-                let target = self.contracted_target_from_index(i, usize::try_from(target).unwrap());
+                let target =
+                    self.contracted_target_from_index(index, usize::try_from(target).unwrap());
                 // move target if it is not moved yet
                 if let Rating::Value(_) = self.move_ratings[target] {
                     let i = match self

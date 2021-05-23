@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, convert::TryFrom, mem, usize};
+use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, mem, usize};
 
 use tgp::{GameData, RevEffect};
 
@@ -94,15 +94,20 @@ impl SearchTreeState {
         self.next_levels = Some((Vec::new(), Vec::new()));
     }
 
-    pub fn extend(&mut self) {
+    /// Returns true if fully successful and false if children or grandchildren are empty
+    /// (note that children are still pushed if grandchildren are empty)
+    pub fn extend(&mut self) -> bool {
         let (children, g_children) = self.next_levels.take().expect(INTERNAL_ERROR);
-        assert!(
-            !children.is_empty() && !g_children.is_empty(),
-            "{}",
-            INTERNAL_ERROR
-        );
-        self.tree.push(children);
-        self.tree.push(g_children);
+        if !children.is_empty() && !g_children.is_empty() {
+            self.tree.push(children);
+            self.tree.push(g_children);
+            true
+        } else if !children.is_empty() {
+            self.tree.push(children);
+            false
+        } else {
+            false
+        }
     }
 
     pub fn push_child<I>(
@@ -203,8 +208,11 @@ impl SearchTreeState {
     }
 
     /// f must return the engine in the same state as before
-    pub fn for_each_leaf<T: GameData, F>(&mut self, stepper: &mut EngineStepper<T>, mut function: F)
-    where
+    pub fn for_each_leaf<T: GameData + Debug, F>(
+        &mut self,
+        stepper: &mut EngineStepper<T>,
+        mut function: F,
+    ) where
         T::EffectType: RevEffect<T>,
         F: FnMut(&mut Self, &mut EngineStepper<T>, TreeIndex),
     {
@@ -212,7 +220,7 @@ impl SearchTreeState {
         self.for_each_leaf_impl(stepper, &mut function, TreeIndex(0, 0), &mut children_start);
     }
 
-    fn for_each_leaf_impl<T: GameData, F>(
+    fn for_each_leaf_impl<T: GameData + Debug, F>(
         &mut self,
         stepper: &mut EngineStepper<T>,
         function: &mut F,

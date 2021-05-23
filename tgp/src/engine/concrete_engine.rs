@@ -31,6 +31,10 @@ impl<T: GameData, L: EventListener<T>> GameEngine for Engine<T, L> {
         match &self.state {
             InternalState::PEffect(_) => GameState::PendingEffect(PendingEffect { engine: self }),
             InternalState::PDecision(_, _) => {
+                assert!(
+                    self.option_count() > 0,
+                    "At least one possible option per decision required!"
+                );
                 GameState::PendingDecision(PendingDecision { engine: self })
             }
             InternalState::Finished => GameState::Finished(Finished { engine: self }),

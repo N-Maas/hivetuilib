@@ -11,7 +11,7 @@ use tgp::{
 use crate::{IndexType, INTERNAL_ERROR};
 
 // TODO: abstract over multiple decisions by same player? --> is probably hard
-pub(crate) struct EngineStepper<'a, T: GameData>
+pub(crate) struct EngineStepper<'a, T: GameData + Debug>
 where
     T::EffectType: RevEffect<T>,
 {
@@ -28,7 +28,7 @@ where
     }
 }
 
-impl<'a, T: GameData> EngineStepper<'a, T>
+impl<'a, T: GameData + Debug> EngineStepper<'a, T>
 where
     T::EffectType: RevEffect<T>,
 {
