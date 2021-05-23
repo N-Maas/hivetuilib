@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, marker::PhantomData, fmt::Debug};
+use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, marker::PhantomData};
 
 use tgp::{
     engine::{logging::EventLog, CloneError, Engine, EventListener, GameEngine},
@@ -60,7 +60,7 @@ where
     _t: PhantomData<T>,
 }
 
-type RatingList = Vec<(RatingType, IndexType)>;
+type RatingList = Vec<(RatingType, Box<[IndexType]>)>;
 
 impl<T: GameData, R: RateAndMap<T>> MinMaxAlgorithm<T, R>
 where
@@ -80,7 +80,7 @@ where
         L: EventListener<T>,
     {
         let (_, index_list) = self.run(engine).expect("Invalid engine state!");
-        for i in index_list {
+        for &i in index_list.iter() {
             match engine.pull() {
                 tgp::engine::GameState::PendingDecision(dec) => dec.select_option(i),
                 _ => panic!("{}", INTERNAL_ERROR),
@@ -91,7 +91,7 @@ where
     pub fn run<L>(
         &self,
         engine: &Engine<T, L>,
-    ) -> Result<(RatingType, Vec<usize>), InvalidEngineState>
+    ) -> Result<(RatingType, Box<[usize]>), InvalidEngineState>
     where
         T: Clone,
         L: EventListener<T>,
@@ -101,27 +101,20 @@ where
         }
         let mut engine = engine.try_clone_with_listener(EventLog::new())?;
 
-        let ratings = self.calculate_ratings(&mut engine)?;
-        let (rating, index) = ratings
+        let ratings = self.run_all_ratings(&mut engine)?;
+        let (rating, indizes) = ratings
             .into_iter()
             .max_by(|(r1, _), (r2, _)| r1.cmp(r2))
             .expect(INTERNAL_ERROR);
 
         // return result
-        Ok((
-            rating,
-            translate(
-                &mut engine,
-                |context| self.rate_and_map.apply_type_mapping(context),
-                index,
-            ),
-        ))
+        Ok((rating, indizes))
     }
 
-    pub fn run_all_ratings<L>(
+    pub fn run_all_ratings<L: EventListener<T>>(
         &self,
         engine: &Engine<T, L>,
-    ) -> Result<Vec<(RatingType, Vec<usize>)>, InvalidEngineState>
+    ) -> Result<Vec<(RatingType, Box<[usize]>)>, InvalidEngineState>
     where
         T: Clone,
         L: EventListener<T>,
@@ -131,32 +124,8 @@ where
         }
         let mut engine = engine.try_clone_with_listener(EventLog::new())?;
 
-        let ratings = self.calculate_ratings(&mut engine)?;
-        let result = ratings
-            .into_iter()
-            .map(|(r, index)| {
-                (
-                    r,
-                    translate(
-                        &mut engine,
-                        |context| self.rate_and_map.apply_type_mapping(context),
-                        index,
-                    ),
-                )
-            })
-            .collect();
-        Ok(result)
-    }
-
-    fn calculate_ratings(
-        &self,
-        engine: &mut Engine<T, EventLog<T>>,
-    ) -> Result<Vec<(RatingType, IndexType)>, InvalidEngineState>
-    where
-        T: Clone,
-    {
         self.params.integrity_check();
-        let mut stepper = EngineStepper::new(engine, |context| {
+        let mut stepper = EngineStepper::new(&mut engine, |context| {
             self.rate_and_map.apply_type_mapping(context)
         });
         let player = stepper.player();
@@ -172,7 +141,17 @@ where
             self.extend_search_tree(&mut stepper, &mut tree, player);
             // TODO: prune
         }
-        Ok(tree.root_moves().collect::<Vec<_>>())
+        Ok(tree
+            .root_moves()
+            .map(|(val, path)| {
+                (
+                    val,
+                    path.iter()
+                        .map(|&val| usize::try_from(val).unwrap())
+                        .collect::<Box<_>>(),
+                )
+            })
+            .collect::<Vec<_>>())
     }
 
     fn extend_search_tree<M>(
@@ -243,7 +222,7 @@ where
         branch_limit: usize,
         move_diff: RatingType,
         move_limit: usize,
-    ) -> Vec<(RatingType, IndexType, RatingList)>
+    ) -> Vec<(RatingType, Box<[IndexType]>, RatingList)>
     where
         M: Fn(&T::Context) -> DecisionType,
     {
@@ -269,11 +248,11 @@ where
         );
         let mut moves = moves
             .into_iter()
-            .map(|(_, index, eq)| {
-                stepper.forward_step(index);
+            .map(|(_, indizes, eq)| {
+                stepper.forward_step(&indizes);
                 let (rating, children) = self.collect_and_cut(depth - 1, stepper, player);
                 stepper.backward_step();
-                (rating, index, eq, children)
+                (rating, indizes, eq, children)
             })
             .collect::<Vec<_>>();
 
@@ -291,19 +270,22 @@ where
         // resolve equivalency classes
         moves
             .into_iter()
-            .map(|(mut rating, mut index, equivalent_moves, mut children)| {
-                for m_idx in equivalent_moves {
-                    stepper.forward_step(m_idx);
-                    let (m_rating, m_children) = self.collect_and_cut(depth - 1, stepper, player);
-                    if compare(m_rating, rating) == Ordering::Less {
-                        rating = m_rating;
-                        index = m_idx;
-                        children = m_children;
+            .map(
+                |(mut rating, mut indizes, equivalent_moves, mut children)| {
+                    for m_idz in equivalent_moves {
+                        stepper.forward_step(&m_idz);
+                        let (m_rating, m_children) =
+                            self.collect_and_cut(depth - 1, stepper, player);
+                        if compare(m_rating, rating) == Ordering::Less {
+                            rating = m_rating;
+                            indizes = Box::from(m_idz);
+                            children = m_children;
+                        }
+                        stepper.backward_step();
                     }
-                    stepper.backward_step();
-                }
-                (rating, index, children)
-            })
+                    (rating, indizes, children)
+                },
+            )
             .collect()
     }
 
@@ -343,8 +325,8 @@ where
             self.params.move_limit,
             Rater::cut_and_sort_with_equivalency,
         );
-        for (rating, index, _) in moves.iter_mut() {
-            stepper.forward_step(*index);
+        for (rating, indizes, _) in moves.iter_mut() {
+            stepper.forward_step(&indizes);
             *rating = self.min_max_rating(depth - 1, stepper, player);
             stepper.backward_step();
         }
@@ -366,12 +348,12 @@ where
         let result = moves
             .into_iter()
             .map(|(mut rating, mut index, equivalent_moves)| {
-                for m_idx in equivalent_moves {
-                    stepper.forward_step(m_idx);
+                for m_idzs in equivalent_moves {
+                    stepper.forward_step(&m_idzs);
                     let m_rating = self.min_max_rating(depth - 1, stepper, player);
                     if compare(m_rating, rating) == Ordering::Less {
                         rating = m_rating;
-                        index = m_idx;
+                        index = m_idzs;
                     }
                     stepper.backward_step();
                 }
@@ -412,8 +394,8 @@ where
             self.params.move_limit,
             Rater::cut_and_sort,
         );
-        let ratings = moves.into_iter().map(|(_, index)| {
-            stepper.forward_step(index);
+        let ratings = moves.into_iter().map(|(_, indizes)| {
+            stepper.forward_step(&indizes);
             let result = self.min_max_rating(depth - 1, stepper, player);
             stepper.backward_step();
             result
@@ -462,8 +444,12 @@ mod test {
     use crate::{
         engine_stepper::EngineStepper,
         test::{type_mapping, RateAndMapZeroOne, ZeroOneGame},
-        MinMaxAlgorithm, Params,
+        IndexType, MinMaxAlgorithm, Params,
     };
+
+    fn indizes(input: &[IndexType]) -> Box<[IndexType]> {
+        Box::from(input)
+    }
 
     #[test]
     fn min_max_test() {
@@ -499,23 +485,29 @@ mod test {
         assert_eq!(alg.collect_and_cut(0, &mut stepper, 1), (0, Vec::new()));
         assert_eq!(
             alg.collect_and_cut(1, &mut stepper, 0),
-            (1, vec![(1, 0), (-1, 1)])
+            (1, vec![(1, indizes(&[0])), (-1, indizes(&[1]))])
         );
         assert_eq!(
             alg.collect_and_cut(1, &mut stepper, 1),
-            (-1, vec![(-1, 0), (1, 1)])
+            (-1, vec![(-1, indizes(&[0])), (1, indizes(&[1]))])
         );
         assert_eq!(
             alg.collect_and_cut(2, &mut stepper, 0),
-            (-1, vec![(-1, 0), (-9, 1)])
+            (-1, vec![(-1, indizes(&[0])), (-9, indizes(&[1]))])
         );
         assert_eq!(
             alg.collect_and_cut(2, &mut stepper, 1),
-            (1, vec![(1, 0), (9, 1)])
+            (1, vec![(1, indizes(&[0])), (9, indizes(&[1]))])
         );
         alg.params.first_cut_delay_depth = 1;
-        assert_eq!(alg.collect_and_cut(2, &mut stepper, 0), (-1, vec![(-1, 0)]));
-        assert_eq!(alg.collect_and_cut(2, &mut stepper, 1), (1, vec![(1, 0)]));
+        assert_eq!(
+            alg.collect_and_cut(2, &mut stepper, 0),
+            (-1, vec![(-1, indizes(&[0]))])
+        );
+        assert_eq!(
+            alg.collect_and_cut(2, &mut stepper, 1),
+            (1, vec![(1, indizes(&[0]))])
+        );
     }
 
     #[test]
@@ -536,33 +528,87 @@ mod test {
         );
         assert_eq!(
             alg.collect_recursive(1, &mut stepper, 0, 2, 2, 2, 2, 4),
-            vec![(1, 0, Vec::new()), (-1, 1, Vec::new())]
+            vec![
+                (1, indizes(&[0]), Vec::new()),
+                (-1, indizes(&[1]), Vec::new())
+            ]
         );
         assert_eq!(
             alg.collect_recursive(1, &mut stepper, 1, 2, 2, 2, 2, 4),
-            vec![(-1, 0, Vec::new()), (1, 1, Vec::new())]
+            vec![
+                (-1, indizes(&[0]), Vec::new()),
+                (1, indizes(&[1]), Vec::new())
+            ]
         );
         assert_eq!(
             alg.collect_recursive(2, &mut stepper, 0, 2, 2, 2, 2, 4),
             vec![
-                (-1, 0, vec![(-1, 3), (1, 1), (1, 2)]),
-                (-9, 1, vec![(-9, 3), (-1, 1), (-1, 2)])
+                (
+                    -1,
+                    indizes(&[0]),
+                    vec![
+                        (-1, indizes(&[1, 1])),
+                        (1, indizes(&[0, 1])),
+                        (1, indizes(&[1, 0]))
+                    ]
+                ),
+                (
+                    -9,
+                    indizes(&[1]),
+                    vec![
+                        (-9, indizes(&[1, 1])),
+                        (-1, indizes(&[0, 1])),
+                        (-1, indizes(&[1, 0]))
+                    ]
+                )
             ]
         );
         assert_eq!(
             alg.collect_recursive(2, &mut stepper, 1, 2, 2, 2, 2, 4),
             vec![
-                (1, 0, vec![(1, 3), (-1, 1), (-1, 2)]),
-                (9, 1, vec![(9, 3), (1, 1), (1, 2)])
+                (
+                    1,
+                    indizes(&[0]),
+                    vec![
+                        (1, indizes(&[1, 1])),
+                        (-1, indizes(&[0, 1])),
+                        (-1, indizes(&[1, 0]))
+                    ]
+                ),
+                (
+                    9,
+                    indizes(&[1]),
+                    vec![
+                        (9, indizes(&[1, 1])),
+                        (1, indizes(&[0, 1])),
+                        (1, indizes(&[1, 0]))
+                    ]
+                )
             ]
         );
         assert_eq!(
             alg.collect_recursive(2, &mut stepper, 0, 1, 2, 2, 2, 4),
-            vec![(-1, 0, vec![(-1, 3), (1, 1), (1, 2)])]
+            vec![(
+                -1,
+                indizes(&[0]),
+                vec![
+                    (-1, indizes(&[1, 1])),
+                    (1, indizes(&[0, 1])),
+                    (1, indizes(&[1, 0]))
+                ]
+            )]
         );
         assert_eq!(
             alg.collect_recursive(2, &mut stepper, 1, 1, 2, 2, 2, 4),
-            vec![(1, 0, vec![(1, 3), (-1, 1), (-1, 2)])]
+            vec![(
+                1,
+                indizes(&[0]),
+                vec![
+                    (1, indizes(&[1, 1])),
+                    (-1, indizes(&[0, 1])),
+                    (-1, indizes(&[1, 0]))
+                ]
+            )]
         );
     }
 
@@ -573,11 +619,11 @@ mod test {
         alg.params.first_cut_delay_depth = 1;
         let data = ZeroOneGame::new(true, 8);
         let mut engine = Engine::new_logging(2, data);
-        assert_eq!(alg.run(&engine), Ok((1, vec![0, 0])));
+        assert_eq!(alg.run(&engine), Ok((1, Box::from([0, 0]))));
 
         alg.params.depth = 2;
         alg.params.first_cut_delay_depth = 2;
-        assert_eq!(alg.run(&engine), Ok((4, vec![0, 0])));
+        assert_eq!(alg.run(&engine), Ok((4, Box::from([0, 0]))));
 
         match engine.pull() {
             GameState::PendingDecision(dec) => dec.select_option(0),
@@ -591,6 +637,6 @@ mod test {
             GameState::PendingEffect(eff) => eff.all_effects(),
             _ => unreachable!(),
         }
-        assert_eq!(alg.run(&engine), Ok((-4, vec![1])));
+        assert_eq!(alg.run(&engine), Ok((-4, Box::from([1]))));
     }
 }

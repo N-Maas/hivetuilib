@@ -8,10 +8,7 @@ use tgp::{
     GameData, RevEffect,
 };
 
-use crate::{
-    rater::{for_each_decision_flat, DecisionType},
-    IndexType, INTERNAL_ERROR,
-};
+use crate::{rater::DecisionType, IndexType, INTERNAL_ERROR};
 
 // TODO: abstract over multiple decisions by same player? --> is probably hard
 pub(crate) struct EngineStepper<'a, T: GameData, F>
@@ -47,24 +44,20 @@ where
         }
     }
 
-    pub fn forward_step(&mut self, index: IndexType) {
-        let mut current_index = usize::try_from(index).unwrap();
+    pub fn forward_step(&mut self, indizes: &[IndexType]) {
         let mut chosen_context = None;
-        for_each_decision_flat(&mut self.engine, &self.type_mapping, |dec, context| {
-            if current_index < dec.option_count() {
-                chosen_context = Some((context, current_index));
-                true
-            } else {
-                current_index -= dec.option_count();
-                false
+        for (i, &index) in indizes.iter().enumerate() {
+            let index = usize::try_from(index).unwrap();
+            match self.engine.pull() {
+                tgp::engine::GameState::PendingDecision(dec) => {
+                    if i + 1 == indizes.len() {
+                        chosen_context = Some((dec.context(), index));
+                    }
+                    assert!(index < dec.option_count(), "{}", INTERNAL_ERROR);
+                    dec.select_option(index);
+                }
+                _ => panic!("{}", INTERNAL_ERROR),
             }
-        });
-        match self.engine.pull() {
-            tgp::engine::GameState::PendingDecision(dec) => {
-                assert!(current_index < dec.option_count(), "{}", INTERNAL_ERROR);
-                dec.select_option(current_index);
-            }
-            _ => panic!("{}", INTERNAL_ERROR),
         }
         match self.engine.pull() {
             tgp::engine::GameState::PendingEffect(eff) => {
@@ -124,7 +117,7 @@ mod test {
         let mut stepper = EngineStepper::new(&mut engine, type_mapping);
         assert!(!stepper.is_finished());
 
-        stepper.forward_step(0);
+        stepper.forward_step(&[0]);
         assert!(!stepper.is_finished());
         assert_eq!(stepper.data().num_zeros, 1);
         assert_eq!(stepper.data().num_ones, 0);
@@ -134,8 +127,8 @@ mod test {
         assert_eq!(stepper.data().num_zeros, 0);
         assert_eq!(stepper.data().num_ones, 0);
 
-        stepper.forward_step(1);
-        stepper.forward_step(1);
+        stepper.forward_step(&[1]);
+        stepper.forward_step(&[0, 1]);
         assert!(stepper.is_finished());
         assert_eq!(stepper.data().num_zeros, 1);
         assert_eq!(stepper.data().num_ones, 2);
@@ -145,7 +138,7 @@ mod test {
         assert_eq!(stepper.data().num_zeros, 0);
         assert_eq!(stepper.data().num_ones, 1);
 
-        stepper.forward_step(3);
+        stepper.forward_step(&[1, 1]);
         assert!(stepper.is_finished());
         assert_eq!(stepper.data().num_zeros, 0);
         assert_eq!(stepper.data().num_ones, 3);

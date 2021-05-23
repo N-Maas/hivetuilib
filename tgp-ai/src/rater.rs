@@ -1,6 +1,9 @@
 use std::{cmp::Ord, convert::TryFrom, slice, time::Instant, usize};
 
-use tgp::{GameData, engine::{Engine, EventListener, GameEngine, GameState, PendingDecision}};
+use tgp::{
+    engine::{Engine, EventListener, GameEngine, GameState, PendingDecision},
+    GameData,
+};
 
 use crate::{IndexType, RateAndMap, RatingType, INTERNAL_ERROR};
 
@@ -21,6 +24,7 @@ enum Rating {
 #[derive(Debug, Clone)]
 pub struct Rater {
     start_index: Vec<IndexType>,
+    decision_path: Vec<Box<[IndexType]>>,
     move_ratings: Vec<Rating>,
     max_rating: RatingType,
 }
@@ -103,14 +107,13 @@ impl Rater {
         let result = rater.cut_and_sort(min);
         let result = result
             .into_iter()
-            .map(|(rating, index)| {
-                for (i, c) in context_list.iter().enumerate() {
-                    if index < start_index[i + 1] {
-                        let dec_index = usize::try_from(index - start_index[i]).unwrap();
-                        return (rating, dec_index, c.clone());
-                    }
-                }
-                unreachable!();
+            .zip(context_list)
+            .map(|((val, path), context)| {
+                (
+                    val,
+                    usize::try_from(*path.last().unwrap()).unwrap(),
+                    context,
+                )
             })
             .collect();
         result
@@ -124,23 +127,24 @@ impl Rater {
         F: Fn(&T::Context) -> DecisionType,
     {
         let mut decisions = Vec::new();
+        let mut decision_path = Vec::new();
         let mut start_index = vec![0];
         let mut move_ratings = Vec::new();
         let mut start = 0;
-        for_each_decision_flat(engine, type_mapping, |dec, context| {
+        for_each_decision_flat(engine, type_mapping, |dec, path, context| {
             let option_count = dec.option_count();
             start += option_count;
             decisions.push(context);
+            decision_path.push(Box::from(path));
             start_index.push(IndexType::try_from(start).expect("Too large index caused overflow."));
             for _ in 0..option_count {
                 move_ratings.push(Rating::None);
             }
-            // always continue the iteration
-            false
         });
         (
             Self {
                 start_index,
+                decision_path,
                 move_ratings,
                 max_rating: RatingType::MIN,
             },
@@ -149,22 +153,26 @@ impl Rater {
     }
 
     /// The result is sorted in decreasing order.
-    pub(crate) fn cut_and_sort(self, min: RatingType) -> Vec<(RatingType, IndexType)> {
-        let mut result = self
-            .move_ratings
-            .into_iter()
-            .enumerate()
-            .filter_map(|(i, rating)| {
-                let index = IndexType::try_from(i).unwrap();
-                match rating {
-                    Rating::Value(val) => Some((val, index)),
-                    Rating::Equivalency(_) => None,
-                    Rating::None => panic!("Move with index {} is not rated.", index),
+    pub(crate) fn cut_and_sort(self, min: RatingType) -> Vec<(RatingType, Box<[IndexType]>)> {
+        let mut result = Vec::new();
+        for i in 0..self.num_decisions() {
+            let start = self.start_index[i];
+            let range = self.start_index[i + 1] - start;
+            for j in 0..range {
+                match self.move_ratings[usize::try_from(start + j).unwrap()] {
+                    Rating::Value(val) => {
+                        if val >= min {
+                            let mut indizes = self.decision_path[i].as_ref().to_owned();
+                            indizes.push(j);
+                            result.push((val, Box::from(indizes)));
+                        }
+                    }
+                    Rating::Equivalency(_) => {}
+                    Rating::None => panic!("Move with index {} is not rated.", i),
                     Rating::Moved(_) => panic!("{}", INTERNAL_ERROR),
                 }
-            })
-            .filter(|&(val, _)| val >= min)
-            .collect::<Vec<_>>();
+            }
+        }
         result.sort_unstable_by(|(val1, _), (val2, _)| val2.cmp(val1));
         result
     }
@@ -173,10 +181,13 @@ impl Rater {
     pub(crate) fn cut_and_sort_with_equivalency(
         mut self,
         min: RatingType,
-    ) -> Vec<(RatingType, IndexType, Vec<IndexType>)> {
+    ) -> Vec<(RatingType, Box<[IndexType]>, Vec<Box<[IndexType]>>)> {
         let mut result = Vec::new();
-        for i in 0..self.move_ratings.len() {
-            self.move_rating_at(i, min, &mut result);
+        for i in 0..self.num_decisions() {
+            let range = self.start_index[i + 1] - self.start_index[i];
+            for j in 0..range {
+                self.move_rating_at(i, j, min, &mut result);
+            }
         }
         result.sort_unstable_by(|(val1, _, _), (val2, _, _)| val2.cmp(val1));
         result
@@ -185,17 +196,21 @@ impl Rater {
     fn move_rating_at(
         &mut self,
         i: usize,
+        j: IndexType,
         min: RatingType,
-        result: &mut Vec<(RatingType, IndexType, Vec<IndexType>)>,
+        result: &mut Vec<(RatingType, Box<[IndexType]>, Vec<Box<[IndexType]>>)>,
     ) {
-        let index = IndexType::try_from(i).unwrap();
-        let rating = &mut self.move_ratings[i];
+        let start = usize::try_from(self.start_index[i]).unwrap();
+        let index = start + usize::try_from(j).unwrap();
+        let rating = &mut self.move_ratings[index];
         match *rating {
             Rating::Value(val) => {
                 if val >= min {
                     let mapped = IndexType::try_from(result.len()).unwrap();
                     *rating = Rating::Moved(Some(mapped));
-                    result.push((val, index, Vec::new()))
+                    let mut indizes = self.decision_path[i].as_ref().to_owned();
+                    indizes.push(j);
+                    result.push((val, Box::from(indizes), Vec::new()))
                 } else {
                     *rating = Rating::Moved(None);
                 }
@@ -204,14 +219,24 @@ impl Rater {
                 let target = self.contracted_target_from_index(i, usize::try_from(target).unwrap());
                 // move target if it is not moved yet
                 if let Rating::Value(_) = self.move_ratings[target] {
-                    self.move_rating_at(target, min, result);
+                    let i = match self
+                        .start_index
+                        .binary_search(&IndexType::try_from(target).unwrap())
+                    {
+                        Ok(i) => i,
+                        Err(i) => i - 1,
+                    };
+                    let j = IndexType::try_from(target).unwrap() - self.start_index[i];
+                    self.move_rating_at(i, j, min, result);
                 }
                 // add value to list of equivalent moves
                 match self.move_ratings[target] {
                     Rating::Moved(to) => {
                         if let Some(mapped) = to {
                             let (_, _, list) = &mut result[usize::try_from(mapped).unwrap()];
-                            list.push(index);
+                            let mut indizes = self.decision_path[i].as_ref().to_owned();
+                            indizes.push(j);
+                            list.push(Box::from(indizes));
                         }
                         self.move_ratings[i] = Rating::Moved(to);
                     }
@@ -220,7 +245,7 @@ impl Rater {
             }
             // Value of an equivalency class that is already moved
             Rating::Moved(_) => {}
-            Rating::None => panic!("Move with index {} is not rated.", index),
+            Rating::None => panic!("Move at decision {} with index {} is not rated.", i, j),
         }
     }
 
@@ -286,25 +311,25 @@ impl<'a, T: GameData> Iterator for Iter<'a, T> {
 }
 
 /// If apply returns true, the iteration is stopped
-pub(crate) fn for_each_decision_flat<T: GameData, L: EventListener<T>, F, A>(
+pub fn for_each_decision_flat<T: GameData, L: EventListener<T>, F, A>(
     engine: &mut Engine<T, L>,
     type_mapping: F,
     mut apply: A,
 ) where
     F: Fn(&T::Context) -> DecisionType,
-    A: FnMut(&PendingDecision<T, L>, T::Context) -> bool,
+    A: FnMut(&PendingDecision<T, L>, &[IndexType], T::Context),
 {
-    for_each_decision_flat_impl(engine, &type_mapping, &mut apply);
+    for_each_decision_flat_impl(engine, &type_mapping, &mut apply, &mut Vec::new());
 }
 
 fn for_each_decision_flat_impl<T: GameData, L: EventListener<T>, F, A>(
     engine: &mut Engine<T, L>,
     type_mapping: &F,
     apply: &mut A,
-) -> bool
-where
+    path: &mut Vec<IndexType>,
+) where
     F: Fn(&T::Context) -> DecisionType,
-    A: FnMut(&PendingDecision<T, L>, T::Context) -> bool,
+    A: FnMut(&PendingDecision<T, L>, &[IndexType], T::Context),
 {
     let dec = pull_decision(engine, "Internal error - type mapping invalid?");
     let context = dec.context();
@@ -312,19 +337,18 @@ where
         DecisionType::HigherLevel => {
             let option_count = dec.option_count();
             for i in 0..option_count {
+                let index = IndexType::try_from(i).unwrap();
+                path.push(index);
                 pull_decision(engine, INTERNAL_ERROR).select_option(i);
-                let stop = for_each_decision_flat_impl(engine, type_mapping, apply);
-                if stop {
-                    return true;
-                }
+                for_each_decision_flat_impl(engine, type_mapping, apply, path);
+                path.pop();
                 pull_decision(engine, INTERNAL_ERROR)
                     .into_follow_up_decision()
                     .expect(INTERNAL_ERROR)
                     .retract();
             }
-            false
         }
-        DecisionType::BottomLevel => apply(&dec, context),
+        DecisionType::BottomLevel => apply(&dec, &path, context),
     }
 }
 
@@ -459,7 +483,14 @@ mod test {
         rater.rate(1, 0, 2);
         rater.rate(1, 1, 1);
         let result = rater.cut_and_sort(1);
-        assert_eq!(result, vec![(3, 1), (2, 2), (1, 3)]);
+        assert_eq!(
+            result,
+            vec![
+                (3, Box::from([0, 1])),
+                (2, Box::from([1, 0])),
+                (1, Box::from([1, 1]))
+            ]
+        );
 
         let (mut rater, _) = Rater::new(&mut engine, type_mapping);
         rater.rate(0, 0, 0);
@@ -467,6 +498,12 @@ mod test {
         rater.set_equivalent_to(1, 0, 0, 1);
         rater.rate(1, 1, 4);
         let result = rater.cut_and_sort_with_equivalency(1);
-        assert_eq!(result, vec![(4, 3, Vec::new()), (1, 1, vec![2])]);
+        assert_eq!(
+            result,
+            vec![
+                (4, Box::from([1, 1]), Vec::new()),
+                (1, Box::from([0, 1]), vec![Box::from([1, 0])])
+            ]
+        );
     }
 }

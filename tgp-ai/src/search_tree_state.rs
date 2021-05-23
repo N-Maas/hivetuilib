@@ -9,10 +9,10 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct TreeIndex(usize, usize);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TreeEntry {
     pub rating: RatingType,
-    pub index: IndexType,
+    pub indizes: Box<[IndexType]>,
     pub num_children: IndexType,
 }
 
@@ -29,10 +29,10 @@ impl Ord for TreeEntry {
 }
 
 impl TreeEntry {
-    pub fn new((rating, index): (RatingType, IndexType)) -> Self {
+    pub fn new((rating, indizes): (RatingType, Box<[IndexType]>)) -> Self {
         Self {
             rating,
-            index,
+            indizes,
             num_children: 0,
         }
     }
@@ -71,7 +71,7 @@ impl SearchTreeState {
                 // sentinel
                 TreeEntry {
                     rating: 0,
-                    index: 0,
+                    indizes: Box::from(Vec::new()),
                     num_children: 0,
                 },
             ]],
@@ -83,12 +83,12 @@ impl SearchTreeState {
         self.tree.len() - 1
     }
 
-    pub fn root_moves(&self) -> impl Iterator<Item = (RatingType, IndexType)> + '_ {
+    pub fn root_moves(&self) -> impl Iterator<Item = (RatingType, &[IndexType])> + '_ {
         self.tree
             .get(1)
             .expect(INTERNAL_ERROR)
             .iter()
-            .map(|entry| (entry.rating, entry.index))
+            .map(|entry| (entry.rating, entry.indizes.as_ref()))
     }
 
     pub fn new_levels(&mut self) {
@@ -111,10 +111,10 @@ impl SearchTreeState {
         &mut self,
         parent: TreeIndex,
         rating: RatingType,
-        index: IndexType,
+        indizes: Box<[IndexType]>,
         grandchildren: I,
     ) where
-        I: IntoIterator<Item = (RatingType, IndexType)>,
+        I: IntoIterator<Item = (RatingType, Box<[IndexType]>)>,
     {
         assert!(parent.0 == self.depth(), "{}", INTERNAL_ERROR);
 
@@ -125,7 +125,7 @@ impl SearchTreeState {
         }));
         children.push(TreeEntry {
             rating,
-            index,
+            indizes,
             num_children: count,
         });
         self.entry_mut(parent).num_children += 1;
@@ -187,7 +187,7 @@ impl SearchTreeState {
         Self::retain_by_index(self.tree.last_mut().unwrap(), &old_retained);
     }
 
-    fn retain_by_index<T: Copy>(vec: &mut Vec<T>, indices: &[usize]) {
+    fn retain_by_index<T: Clone>(vec: &mut Vec<T>, indices: &[usize]) {
         let mut retained = indices.iter().copied().peekable();
         *vec = vec
             .iter()
@@ -200,7 +200,7 @@ impl SearchTreeState {
                     false
                 }
             })
-            .map(|(_, &x)| x)
+            .map(|(_, x)| x.clone())
             .collect();
     }
 
@@ -235,8 +235,9 @@ impl SearchTreeState {
         } else {
             let offset = children_start[t_index.0];
             for child in 0..self.entry(t_index).num_children() {
-                let entry = self.get_level(depth)[child + offset];
-                stepper.forward_step(entry.index);
+                let entry = &self.get_level(depth)[child + offset];
+                let num_children = entry.num_children();
+                stepper.forward_step(&entry.indizes);
                 self.for_each_leaf_impl(
                     stepper,
                     function,
@@ -244,7 +245,7 @@ impl SearchTreeState {
                     children_start,
                 );
                 stepper.backward_step();
-                children_start[depth] += entry.num_children();
+                children_start[depth] += num_children;
             }
         }
     }
@@ -253,8 +254,8 @@ impl SearchTreeState {
         &self.tree.get(index).expect(INTERNAL_ERROR)
     }
 
-    fn entry(&self, index: TreeIndex) -> TreeEntry {
-        self.tree[index.0][index.1]
+    fn entry(&self, index: TreeIndex) -> &TreeEntry {
+        &self.tree[index.0][index.1]
     }
 
     fn entry_mut(&mut self, index: TreeIndex) -> &mut TreeEntry {
@@ -270,10 +271,14 @@ mod test {
         engine_stepper::EngineStepper,
         search_tree_state::{TreeEntry, TreeIndex},
         test::{type_mapping, ZeroOneGame},
-        RatingType,
+        IndexType, RatingType,
     };
 
     use super::SearchTreeState;
+
+    fn indizes(input: &[IndexType]) -> Box<[IndexType]> {
+        Box::from(input)
+    }
 
     #[test]
     fn build_search_tree_test() {
@@ -281,16 +286,26 @@ mod test {
         assert_eq!(sts.depth(), 0);
 
         sts.new_levels();
-        sts.push_child(TreeIndex(0, 0), 0, 1, vec![(0, 1)]);
-        sts.push_child(TreeIndex(0, 0), 33, 3, vec![(333, 3)]);
-        sts.push_child(TreeIndex(0, 0), -11, 2, vec![(-111, 2), (0, 0)]);
+        sts.push_child(TreeIndex(0, 0), 0, indizes(&[1]), vec![(0, indizes(&[1]))]);
+        sts.push_child(
+            TreeIndex(0, 0),
+            33,
+            indizes(&[3]),
+            vec![(333, indizes(&[3]))],
+        );
+        sts.push_child(
+            TreeIndex(0, 0),
+            -11,
+            indizes(&[2]),
+            vec![(-111, indizes(&[2])), (0, indizes(&[0]))],
+        );
         sts.extend();
 
         assert_eq!(
             sts.tree[0],
             vec![TreeEntry {
                 rating: 0,
-                index: 0,
+                indizes: indizes(&[]),
                 num_children: 3
             },]
         );
@@ -299,17 +314,17 @@ mod test {
             vec![
                 TreeEntry {
                     rating: 0,
-                    index: 1,
+                    indizes: indizes(&[1]),
                     num_children: 1
                 },
                 TreeEntry {
                     rating: 33,
-                    index: 3,
+                    indizes: indizes(&[3]),
                     num_children: 1
                 },
                 TreeEntry {
                     rating: -11,
-                    index: 2,
+                    indizes: indizes(&[2]),
                     num_children: 2
                 }
             ]
@@ -317,10 +332,10 @@ mod test {
         assert_eq!(
             sts.tree[2],
             vec![
-                TreeEntry::new((0, 1)),
-                TreeEntry::new((333, 3)),
-                TreeEntry::new((-111, 2)),
-                TreeEntry::new((0, 0)),
+                TreeEntry::new((0, indizes(&[1]))),
+                TreeEntry::new((333, indizes(&[3]))),
+                TreeEntry::new((-111, indizes(&[2]))),
+                TreeEntry::new((0, indizes(&[0]))),
             ]
         );
 
@@ -335,11 +350,11 @@ mod test {
             sts.tree[1],
             vec![TreeEntry {
                 rating: 33,
-                index: 3,
+                indizes: indizes(&[3]),
                 num_children: 1
             }]
         );
-        assert_eq!(sts.tree[2], vec![TreeEntry::new((333, 3)),]);
+        assert_eq!(sts.tree[2], vec![TreeEntry::new((333, indizes(&[3]))),]);
     }
 
     #[test]
@@ -347,8 +362,10 @@ mod test {
         let mut sts = SearchTreeState::new();
         // TODO: initialization is a bit broken
         sts.tree[0].first_mut().unwrap().num_children = 2;
-        sts.tree
-            .push(vec![TreeEntry::new((-1, 0)), TreeEntry::new((1, 1))]);
+        sts.tree.push(vec![
+            TreeEntry::new((-1, indizes(&[0]))),
+            TreeEntry::new((1, indizes(&[1]))),
+        ]);
 
         let data = ZeroOneGame::new(false, 4);
         let mut engine = Engine::new_logging(2, data);
@@ -359,13 +376,23 @@ mod test {
             assert_eq!(stepper.decision_context().len(), 1);
             let rating =
                 stepper.data().num_ones as RatingType - stepper.data().num_zeros as RatingType;
-            tree_state.push_child(t_index, rating, 1, vec![(rating + 1, 1)]);
-            tree_state.push_child(t_index, rating, 2, vec![(rating + 1, 1)]);
+            tree_state.push_child(
+                t_index,
+                rating,
+                indizes(&[0, 1]),
+                vec![(rating + 1, indizes(&[1]))],
+            );
+            tree_state.push_child(
+                t_index,
+                rating,
+                indizes(&[1, 0]),
+                vec![(rating + 1, indizes(&[1]))],
+            );
             tree_state.push_child(
                 t_index,
                 rating + 2,
-                3,
-                vec![(rating + 1, 0), (rating + 3, 1)],
+                indizes(&[1, 1]),
+                vec![(rating + 1, indizes(&[0])), (rating + 3, indizes(&[1]))],
             );
         });
         sts.extend();
@@ -385,12 +412,12 @@ mod test {
             vec![
                 TreeEntry {
                     rating: 0,
-                    index: 0,
+                    indizes: indizes(&[0]),
                     num_children: 3
                 },
                 TreeEntry {
                     rating: 2,
-                    index: 1,
+                    indizes: indizes(&[1]),
                     num_children: 3
                 }
             ]
