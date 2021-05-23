@@ -85,7 +85,7 @@ impl Rater {
     pub fn create_rating<T: GameData, L: EventListener<T>, R: RateAndMap<T>>(
         engine: &mut Engine<T, L>,
         r_a_m: &R,
-    ) -> Vec<(RatingType, usize, T::Context)>
+    ) -> Vec<(RatingType, Box<[usize]>)>
     where
         T::Context: Clone,
     {
@@ -106,12 +106,12 @@ impl Rater {
         let result = rater.cut_and_sort(min);
         result
             .into_iter()
-            .zip(context_list)
-            .map(|((val, path), context)| {
+            .map(|(val, path)| {
                 (
                     val,
-                    usize::try_from(*path.last().unwrap()).unwrap(),
-                    context,
+                    path.into_iter()
+                        .map(|&i| usize::try_from(i).unwrap())
+                        .collect(),
                 )
             })
             .collect()
@@ -160,9 +160,7 @@ impl Rater {
                 match self.move_ratings[usize::try_from(start + j).unwrap()] {
                     Rating::Value(val) => {
                         if val >= min {
-                            let mut indizes = self.decision_path[i].as_ref().to_owned();
-                            indizes.push(j);
-                            result.push((val, Box::from(indizes)));
+                            result.push((val, self.extended_path(i, j)));
                         }
                     }
                     Rating::Equivalency(_) => {}
@@ -191,6 +189,12 @@ impl Rater {
         result
     }
 
+    fn extended_path(&self, i: usize, index: IndexType) -> Box<[IndexType]> {
+        let mut indizes = self.decision_path[i].as_ref().to_owned();
+        indizes.push(index);
+        Box::from(indizes)
+    }
+
     fn move_rating_at(
         &mut self,
         i: usize,
@@ -206,9 +210,7 @@ impl Rater {
                 if val >= min {
                     let mapped = IndexType::try_from(result.len()).unwrap();
                     *rating = Rating::Moved(Some(mapped));
-                    let mut indizes = self.decision_path[i].as_ref().to_owned();
-                    indizes.push(j);
-                    result.push((val, Box::from(indizes), Vec::new()))
+                    result.push((val, self.extended_path(i, j), Vec::new()))
                 } else {
                     *rating = Rating::Moved(None);
                 }
@@ -232,9 +234,7 @@ impl Rater {
                     Rating::Moved(to) => {
                         if let Some(mapped) = to {
                             let (_, _, list) = &mut result[usize::try_from(mapped).unwrap()];
-                            let mut indizes = self.decision_path[i].as_ref().to_owned();
-                            indizes.push(j);
-                            list.push(Box::from(indizes));
+                            list.push(self.extended_path(i, j));
                         }
                         self.move_ratings[i] = Rating::Moved(to);
                     }
