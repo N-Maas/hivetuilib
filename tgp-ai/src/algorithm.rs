@@ -7,7 +7,7 @@ use tgp::{
 
 use crate::{
     engine_stepper::EngineStepper,
-    rater::{translate, DecisionType, Rater},
+    rater::{DecisionType, Rater},
     search_tree_state::SearchTreeState,
     IndexType, Params, RatingType, INTERNAL_ERROR,
 };
@@ -96,12 +96,7 @@ where
         T: Clone,
         L: EventListener<T>,
     {
-        if engine.is_finished() {
-            return Err(InvalidEngineState::Finished);
-        }
-        let mut engine = engine.try_clone_with_listener(EventLog::new())?;
-
-        let ratings = self.run_all_ratings(&mut engine)?;
+        let ratings = self.run_all_ratings(&engine)?;
         let (rating, indizes) = ratings
             .into_iter()
             .max_by(|(r1, _), (r2, _)| r1.cmp(r2))
@@ -125,9 +120,7 @@ where
         let mut engine = engine.try_clone_with_listener(EventLog::new())?;
 
         self.params.integrity_check();
-        let mut stepper = EngineStepper::new(&mut engine, |context| {
-            self.rate_and_map.apply_type_mapping(context)
-        });
+        let mut stepper = EngineStepper::new(&mut engine);
         let player = stepper.player();
 
         // calculate move
@@ -154,14 +147,12 @@ where
             .collect::<Vec<_>>())
     }
 
-    fn extend_search_tree<M>(
+    fn extend_search_tree(
         &self,
-        stepper: &mut EngineStepper<T, M>,
+        stepper: &mut EngineStepper<T>,
         tree: &mut SearchTreeState,
         player: usize,
-    ) where
-        M: Fn(&T::Context) -> DecisionType,
-    {
+    ) {
         assert!(tree.depth() < 2 * self.params.depth);
         let is_root = tree.depth() == 0;
         tree.new_levels();
@@ -212,20 +203,17 @@ where
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn collect_recursive<M>(
+    fn collect_recursive(
         &self,
         depth: usize,
-        stepper: &mut EngineStepper<T, M>,
+        stepper: &mut EngineStepper<T>,
         player: usize,
         delay_depth: usize,
         branch_diff: RatingType,
         branch_limit: usize,
         move_diff: RatingType,
         move_limit: usize,
-    ) -> Vec<(RatingType, Box<[IndexType]>, RatingList)>
-    where
-        M: Fn(&T::Context) -> DecisionType,
-    {
+    ) -> Vec<(RatingType, Box<[IndexType]>, RatingList)> {
         if depth == 0 || stepper.is_finished() {
             return Vec::new();
         }
@@ -278,7 +266,7 @@ where
                             self.collect_and_cut(depth - 1, stepper, player);
                         if compare(m_rating, rating) == Ordering::Less {
                             rating = m_rating;
-                            indizes = Box::from(m_idz);
+                            indizes = m_idz;
                             children = m_children;
                         }
                         stepper.backward_step();
@@ -289,15 +277,12 @@ where
             .collect()
     }
 
-    fn collect_and_cut<M>(
+    fn collect_and_cut(
         &self,
         depth: usize,
-        stepper: &mut EngineStepper<T, M>,
+        stepper: &mut EngineStepper<T>,
         player: usize,
-    ) -> (RatingType, RatingList)
-    where
-        M: Fn(&T::Context) -> DecisionType,
-    {
+    ) -> (RatingType, RatingList) {
         if depth == 0 || stepper.is_finished() {
             return (
                 self.rate_and_map.rate_game_state(
@@ -370,15 +355,12 @@ where
         (min, result)
     }
 
-    fn min_max_rating<M>(
+    fn min_max_rating(
         &self,
         depth: usize,
-        stepper: &mut EngineStepper<T, M>,
+        stepper: &mut EngineStepper<T>,
         player: usize,
-    ) -> RatingType
-    where
-        M: Fn(&T::Context) -> DecisionType,
-    {
+    ) -> RatingType {
         if depth == 0 || stepper.is_finished() {
             return self.rate_and_map.rate_game_state(
                 stepper.data(),
@@ -408,16 +390,13 @@ where
     }
 
     #[inline]
-    fn create_move_ratings<M, E: Ord + Debug>(
+    fn create_move_ratings<E: Ord + Debug>(
         &self,
-        stepper: &mut EngineStepper<T, M>,
+        stepper: &mut EngineStepper<T>,
         move_difference: RatingType,
         move_limit: usize,
         rater_fn: fn(Rater, RatingType) -> Vec<E>,
-    ) -> Vec<E>
-    where
-        M: Fn(&T::Context) -> DecisionType,
-    {
+    ) -> Vec<E> {
         let (mut rater, context) = Rater::new(stepper.engine(), |context| {
             self.rate_and_map.apply_type_mapping(context)
         });
@@ -443,7 +422,7 @@ mod test {
 
     use crate::{
         engine_stepper::EngineStepper,
-        test::{type_mapping, RateAndMapZeroOne, ZeroOneGame},
+        test::{RateAndMapZeroOne, ZeroOneGame},
         IndexType, MinMaxAlgorithm, Params,
     };
 
@@ -457,7 +436,7 @@ mod test {
         let alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         let data = ZeroOneGame::new(false, 6);
         let mut engine = Engine::new_logging(2, data);
-        let mut stepper = EngineStepper::new(&mut engine, type_mapping);
+        let mut stepper = EngineStepper::new(&mut engine);
 
         assert_eq!(alg.min_max_rating(0, &mut stepper, 0), 0);
         assert_eq!(alg.min_max_rating(0, &mut stepper, 1), 0);
@@ -479,7 +458,7 @@ mod test {
         let mut alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         let data = ZeroOneGame::new(false, 6);
         let mut engine = Engine::new_logging(2, data);
-        let mut stepper = EngineStepper::new(&mut engine, type_mapping);
+        let mut stepper = EngineStepper::new(&mut engine);
 
         assert_eq!(alg.collect_and_cut(0, &mut stepper, 0), (0, Vec::new()));
         assert_eq!(alg.collect_and_cut(0, &mut stepper, 1), (0, Vec::new()));
@@ -516,7 +495,7 @@ mod test {
         let alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         let data = ZeroOneGame::new(false, 6);
         let mut engine = Engine::new_logging(2, data);
-        let mut stepper = EngineStepper::new(&mut engine, type_mapping);
+        let mut stepper = EngineStepper::new(&mut engine);
 
         assert_eq!(
             alg.collect_recursive(0, &mut stepper, 0, 2, 2, 2, 2, 4),

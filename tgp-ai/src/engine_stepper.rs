@@ -4,43 +4,38 @@ use std::{
 };
 
 use tgp::{
-    engine::{logging::EventLog, Engine, GameEngine},
+    engine::{logging::EventLog, Engine, GameEngine, GameState},
     GameData, RevEffect,
 };
 
-use crate::{rater::DecisionType, IndexType, INTERNAL_ERROR};
+use crate::{IndexType, INTERNAL_ERROR};
 
 // TODO: abstract over multiple decisions by same player? --> is probably hard
-pub(crate) struct EngineStepper<'a, T: GameData, F>
+pub(crate) struct EngineStepper<'a, T: GameData>
 where
     T::EffectType: RevEffect<T>,
-    F: Fn(&T::Context) -> DecisionType,
 {
     engine: &'a mut Engine<T, EventLog<T>>,
     decision_context: Vec<(T::Context, usize)>,
-    type_mapping: F,
 }
 
-impl<T: GameData + Debug, F> Debug for EngineStepper<'_, T, F>
+impl<T: GameData + Debug> Debug for EngineStepper<'_, T>
 where
     T::EffectType: RevEffect<T>,
-    F: Fn(&T::Context) -> DecisionType,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "EngineStepper {{ engine: {:#?} }}", self.engine)
     }
 }
 
-impl<'a, T: GameData, F> EngineStepper<'a, T, F>
+impl<'a, T: GameData> EngineStepper<'a, T>
 where
     T::EffectType: RevEffect<T>,
-    F: Fn(&T::Context) -> DecisionType,
 {
-    pub fn new(engine: &'a mut Engine<T, EventLog<T>>, type_mapping: F) -> Self {
+    pub fn new(engine: &'a mut Engine<T, EventLog<T>>) -> Self {
         Self {
             engine,
             decision_context: Vec::new(),
-            type_mapping,
         }
     }
 
@@ -49,18 +44,24 @@ where
         for (i, &index) in indizes.iter().enumerate() {
             let index = usize::try_from(index).unwrap();
             match self.engine.pull() {
-                tgp::engine::GameState::PendingDecision(dec) => {
+                GameState::PendingDecision(dec) => {
                     if i + 1 == indizes.len() {
                         chosen_context = Some((dec.context(), index));
                     }
-                    assert!(index < dec.option_count(), "{}", INTERNAL_ERROR);
+                    assert!(
+                        index < dec.option_count(),
+                        "{} - indizes={:?}, option_count={}",
+                        INTERNAL_ERROR,
+                        indizes,
+                        dec.option_count()
+                    );
                     dec.select_option(index);
                 }
                 _ => panic!("{}", INTERNAL_ERROR),
             }
         }
         match self.engine.pull() {
-            tgp::engine::GameState::PendingEffect(eff) => {
+            GameState::PendingEffect(eff) => {
                 eff.all_effects();
             }
             _ => panic!("{}", INTERNAL_ERROR),
@@ -95,7 +96,7 @@ where
     // TODO: probably shouldn't be mut
     pub fn player(&mut self) -> usize {
         match self.engine.pull() {
-            tgp::engine::GameState::PendingDecision(dec) => dec.player(),
+            GameState::PendingDecision(dec) => dec.player(),
             _ => panic!("{}", INTERNAL_ERROR),
         }
     }
@@ -105,16 +106,13 @@ where
 mod test {
     use tgp::engine::Engine;
 
-    use crate::{
-        engine_stepper::EngineStepper,
-        test::{type_mapping, ZeroOneGame},
-    };
+    use crate::{engine_stepper::EngineStepper, test::ZeroOneGame};
 
     #[test]
     fn stepping_test() {
         let data = ZeroOneGame::new(false, 3);
         let mut engine = Engine::new_logging(2, data);
-        let mut stepper = EngineStepper::new(&mut engine, type_mapping);
+        let mut stepper = EngineStepper::new(&mut engine);
         assert!(!stepper.is_finished());
 
         stepper.forward_step(&[0]);

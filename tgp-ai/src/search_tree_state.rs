@@ -2,9 +2,7 @@ use std::{cmp::Ordering, convert::TryFrom, mem, usize};
 
 use tgp::{GameData, RevEffect};
 
-use crate::{
-    engine_stepper::EngineStepper, rater::DecisionType, IndexType, RatingType, INTERNAL_ERROR,
-};
+use crate::{engine_stepper::EngineStepper, IndexType, RatingType, INTERNAL_ERROR};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct TreeIndex(usize, usize);
@@ -205,29 +203,24 @@ impl SearchTreeState {
     }
 
     /// f must return the engine in the same state as before
-    pub fn for_each_leaf<T: GameData, F, M>(
-        &mut self,
-        stepper: &mut EngineStepper<T, M>,
-        mut function: F,
-    ) where
+    pub fn for_each_leaf<T: GameData, F>(&mut self, stepper: &mut EngineStepper<T>, mut function: F)
+    where
         T::EffectType: RevEffect<T>,
-        F: FnMut(&mut Self, &mut EngineStepper<T, M>, TreeIndex),
-        M: Fn(&T::Context) -> DecisionType,
+        F: FnMut(&mut Self, &mut EngineStepper<T>, TreeIndex),
     {
         let mut children_start = vec![0; self.tree.len()];
         self.for_each_leaf_impl(stepper, &mut function, TreeIndex(0, 0), &mut children_start);
     }
 
-    fn for_each_leaf_impl<T: GameData, F, M>(
+    fn for_each_leaf_impl<T: GameData, F>(
         &mut self,
-        stepper: &mut EngineStepper<T, M>,
+        stepper: &mut EngineStepper<T>,
         function: &mut F,
         t_index: TreeIndex,
         children_start: &mut Vec<usize>,
     ) where
         T::EffectType: RevEffect<T>,
-        F: FnMut(&mut Self, &mut EngineStepper<T, M>, TreeIndex),
-        M: Fn(&T::Context) -> DecisionType,
+        F: FnMut(&mut Self, &mut EngineStepper<T>, TreeIndex),
     {
         let depth = t_index.0 + 1;
         if depth == self.tree.len() {
@@ -270,7 +263,7 @@ mod test {
     use crate::{
         engine_stepper::EngineStepper,
         search_tree_state::{TreeEntry, TreeIndex},
-        test::{type_mapping, ZeroOneGame},
+        test::ZeroOneGame,
         IndexType, RatingType,
     };
 
@@ -369,7 +362,7 @@ mod test {
 
         let data = ZeroOneGame::new(false, 4);
         let mut engine = Engine::new_logging(2, data);
-        let mut stepper = EngineStepper::new(&mut engine, type_mapping);
+        let mut stepper = EngineStepper::new(&mut engine);
 
         sts.new_levels();
         sts.for_each_leaf(&mut stepper, |tree_state, stepper, t_index| {

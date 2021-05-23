@@ -1,4 +1,4 @@
-use std::{cmp::Ord, convert::TryFrom, slice, time::Instant, usize};
+use std::{cmp::Ord, convert::TryFrom, slice, usize};
 
 use tgp::{
     engine::{Engine, EventListener, GameEngine, GameState, PendingDecision},
@@ -103,9 +103,8 @@ impl Rater {
             })
             .min()
             .unwrap();
-        let start_index = rater.start_index.clone();
         let result = rater.cut_and_sort(min);
-        let result = result
+        result
             .into_iter()
             .zip(context_list)
             .map(|((val, path), context)| {
@@ -115,8 +114,7 @@ impl Rater {
                     context,
                 )
             })
-            .collect();
-        result
+            .collect()
     }
 
     pub(crate) fn new<T: GameData, F, L: EventListener<T>>(
@@ -362,13 +360,10 @@ where
 {
     let index = usize::try_from(index).unwrap();
     let (result, _) = translate_impl(engine, &type_mapping, index);
-    match engine.pull() {
-        GameState::PendingDecision(dec) => {
-            if let Some(fu) = dec.into_follow_up_decision() {
-                fu.retract_all();
-            }
+    if let GameState::PendingDecision(dec) = engine.pull() {
+        if let Some(fu) = dec.into_follow_up_decision() {
+            fu.retract_all();
         }
-        _ => {}
     }
     result.expect(INTERNAL_ERROR).into_iter().rev().collect()
 }
