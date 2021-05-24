@@ -163,8 +163,10 @@ where
                 "Min-max algorithm requires alternating turns!"
             );
             let new_moves = if is_root {
-                let depth =
-                    self.params.first_cut_delay_depth + self.params.first_move_added_delay_depth;
+                let depth = usize::min(
+                    self.params.first_cut_delay_depth + self.params.first_move_added_delay_depth,
+                    self.params.depth,
+                );
                 let branch_limit = f32::ceil(
                     self.params.limit_multiplier_first_move
                         * self.params.branch_limit_first_cut as f32,
@@ -184,7 +186,7 @@ where
                 )
             } else {
                 self.collect_recursive(
-                    2 * self.params.first_cut_delay_depth,
+                    2 * usize::min(self.params.first_cut_delay_depth, self.params.depth),
                     stepper,
                     player,
                     self.params.first_cut_delay_depth,
