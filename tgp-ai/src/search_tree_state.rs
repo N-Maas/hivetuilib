@@ -81,6 +81,7 @@ impl SearchTreeState {
         self.tree.len() - 1
     }
 
+    // TODO: not a good API
     pub fn root_moves(&self) -> impl Iterator<Item = (RatingType, &[IndexType])> + '_ {
         self.tree
             .get(1)

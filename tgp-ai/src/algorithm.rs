@@ -132,6 +132,9 @@ where
             + 1;
         for _ in 0..num_runs {
             self.extend_search_tree(&mut stepper, &mut tree, player);
+            if tree.root_moves().count() == 1 {
+                break;
+            }
             // TODO: prune
         }
         Ok(tree
@@ -164,9 +167,8 @@ where
         let sliding = self.params.sliding.get(tree.depth()..);
         tree.new_levels();
         tree.for_each_leaf(stepper, |tree, stepper, t_index| {
-            assert_eq!(
-                stepper.player(),
-                player,
+            assert!(
+                stepper.is_finished() || stepper.player() == player,
                 "Min-max algorithm requires alternating turns!"
             );
             let new_moves = self.collect_recursive(
@@ -601,7 +603,7 @@ mod test {
 
     #[test]
     fn run_test() {
-        let sliding = SlidingParams::with_defaults(1, 2,4, 4, 2, 2, 4);
+        let sliding = SlidingParams::with_defaults(1, 2, 4, 4, 2, 2, 4);
         let params = Params::new(1, sliding.clone());
         let mut alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         alg.params.first_cut_delay_depth = 1;
@@ -609,7 +611,7 @@ mod test {
         let mut engine = Engine::new_logging(2, data);
         assert_eq!(alg.run(&engine), Ok((1, Box::from([0, 0]))));
 
-        let sliding = SlidingParams::with_defaults(2, 1, 4, 4, 2, 2, 4);
+        let sliding = SlidingParams::with_defaults(2, 1, 4, 4, 4, 2, 4);
         let params = Params::new(2, sliding.clone());
         let mut alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         alg.params.first_cut_delay_depth = 1;
