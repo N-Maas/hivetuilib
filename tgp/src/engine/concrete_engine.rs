@@ -118,6 +118,16 @@ impl<'a, T: GameData, L: EventListener<T>> PendingDecision<'a, T, L> {
             None
         }
     }
+
+    pub fn try_into_follow_up_decision(self) -> Result<FollowUpDecision<'a, T, L>, Self> {
+        if self.is_follow_up_decision() {
+            Ok(FollowUpDecision {
+                engine: self.engine,
+            })
+        } else {
+            Err(self)
+        }
+    }
 }
 
 impl<T: GameData> PendingDecision<'_, T, EventLog<T>>
