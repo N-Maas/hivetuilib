@@ -306,4 +306,12 @@ where
             false
         }
     }
+
+    pub fn redo_decision(&mut self) -> bool {
+        if let GameState::PendingDecision(d) = self.pull() {
+            d.redo_decision()
+        } else {
+            false
+        }
+    }
 }
