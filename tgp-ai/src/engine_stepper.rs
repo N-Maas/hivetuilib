@@ -39,10 +39,13 @@ where
         }
     }
 
-    pub fn forward_step(&mut self, indizes: &[IndexType]) {
+    pub fn forward_step<I: TryInto<usize> + Copy + Debug>(&mut self, indizes: &[I])
+    where
+        I::Error: Debug,
+    {
         let mut chosen_context = None;
         for (i, &index) in indizes.iter().enumerate() {
-            let index = usize::try_from(index).unwrap();
+            let index = index.try_into().unwrap();
             match self.engine.pull() {
                 GameState::PendingDecision(dec) => {
                     if i + 1 == indizes.len() {

@@ -79,6 +79,32 @@ impl From<CloneError> for MinMaxError {
     }
 }
 
+pub fn add_context_to_ratings<T, L>(
+    engine: &Engine<T, L>,
+    ratings: Vec<(RatingType, Box<[usize]>)>,
+) -> Result<Vec<(RatingType, Box<[usize]>, T::Context)>, InvalidEngineState>
+where
+    T: GameData + Clone + Debug,
+    L: EventListener<T>,
+    T::EffectType: RevEffect<T>,
+{
+    if engine.is_finished() {
+        return Err(InvalidEngineState::Finished);
+    }
+    let mut engine = engine.try_clone_with_listener(EventLog::new())?;
+    let mut stepper = EngineStepper::new(&mut engine);
+
+    let result = ratings
+        .into_iter()
+        .map(|(val, path)| {
+            stepper.forward_step(&path);
+            let (ctx, _) = stepper.backward_step();
+            (val, path, ctx)
+        })
+        .collect::<Vec<_>>();
+    Ok(result)
+}
+
 pub struct MinMaxAlgorithm<T: GameData + Debug, R: RateAndMap<T>>
 where
     T::EffectType: RevEffect<T>,
@@ -198,9 +224,7 @@ where
             .map(|(val, path)| {
                 (
                     val,
-                    path.iter()
-                        .map(|&val| usize::try_from(val).unwrap())
-                        .collect::<Box<_>>(),
+                    path.iter().map(|&i| usize::try_from(i).unwrap()).collect(),
                     {
                         stepper.forward_step(path);
                         let (ctx, _) = stepper.backward_step();
@@ -677,13 +701,19 @@ mod test {
         alg.params.first_cut_delay_depth = 1;
         let data = ZeroOneGame::new(true, 8);
         let mut engine = Engine::new_logging(2, data);
-        assert_eq!(alg.run(&engine), Ok((1, Box::from([0, 0]), ZeroOneContext::ZeroAnd)));
+        assert_eq!(
+            alg.run(&engine),
+            Ok((1, Box::from([0, 0]), ZeroOneContext::ZeroAnd))
+        );
 
         let sliding = SlidingParams::with_defaults(2, 1, 4, 4, 4, 2, 4);
         let params = Params::new(2, sliding.clone());
         let mut alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         alg.params.first_cut_delay_depth = 1;
-        assert_eq!(alg.run(&engine), Ok((4, Box::from([0, 0]), ZeroOneContext::ZeroAnd)));
+        assert_eq!(
+            alg.run(&engine),
+            Ok((4, Box::from([0, 0]), ZeroOneContext::ZeroAnd))
+        );
 
         match engine.pull() {
             GameState::PendingDecision(dec) => dec.select_option(0),
@@ -697,6 +727,9 @@ mod test {
             GameState::PendingEffect(eff) => eff.all_effects(),
             _ => unreachable!(),
         }
-        assert_eq!(alg.run(&engine), Ok((-4, Box::from([1]), ZeroOneContext::Flat)));
+        assert_eq!(
+            alg.run(&engine),
+            Ok((-4, Box::from([1]), ZeroOneContext::Flat))
+        );
     }
 }
