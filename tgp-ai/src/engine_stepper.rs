@@ -70,11 +70,11 @@ where
             .push(chosen_context.expect(INTERNAL_ERROR));
     }
 
-    pub fn backward_step(&mut self) {
-        self.decision_context.pop();
+    pub fn backward_step(&mut self) -> (T::Context, usize) {
         if !self.engine.undo_last_decision() {
             panic!("{}", INTERNAL_ERROR)
         }
+        self.decision_context.pop().expect(INTERNAL_ERROR)
     }
 
     pub fn is_finished(&self) -> bool {

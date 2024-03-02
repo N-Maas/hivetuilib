@@ -107,7 +107,7 @@ where
         T: Clone,
         L: EventListener<T>,
     {
-        let (_, index_list) = self.run(engine).expect("Invalid engine state!");
+        let (_, index_list, _) = self.run(engine).expect("Invalid engine state!");
         for &i in index_list.iter() {
             match engine.pull() {
                 tgp::engine::GameState::PendingDecision(dec) => dec.select_option(i),
@@ -119,7 +119,7 @@ where
     pub fn run<L>(
         &self,
         engine: &Engine<T, L>,
-    ) -> Result<(RatingType, Box<[usize]>), InvalidEngineState>
+    ) -> Result<(RatingType, Box<[usize]>, T::Context), InvalidEngineState>
     where
         T: Clone,
         L: EventListener<T>,
@@ -132,28 +132,28 @@ where
         &self,
         engine: &Engine<T, L>,
         should_cancel: F,
-    ) -> Result<(RatingType, Box<[usize]>), MinMaxError>
+    ) -> Result<(RatingType, Box<[usize]>, T::Context), MinMaxError>
     where
-        T: Clone,
+        T: GameData + Clone,
         L: EventListener<T>,
         F: Fn() -> bool,
     {
         let ratings = self.run_all_ratings_with_cancellation(&engine, should_cancel)?;
-        let (rating, indizes) = ratings
+        let result = ratings
             .into_iter()
-            .max_by(|(r1, _), (r2, _)| r1.cmp(r2))
+            .max_by_key(|&(r, _, _)| r)
             .expect(INTERNAL_ERROR);
 
         // return result
-        Ok((rating, indizes))
+        Ok(result)
     }
 
     pub fn run_all_ratings<L>(
         &self,
         engine: &Engine<T, L>,
-    ) -> Result<Vec<(RatingType, Box<[usize]>)>, InvalidEngineState>
+    ) -> Result<Vec<(RatingType, Box<[usize]>, T::Context)>, InvalidEngineState>
     where
-        T: Clone,
+        T: GameData + Clone,
         L: EventListener<T>,
     {
         self.run_all_ratings_with_cancellation(engine, || false)
@@ -164,9 +164,9 @@ where
         &self,
         engine: &Engine<T, L>,
         should_cancel: F,
-    ) -> Result<Vec<(RatingType, Box<[usize]>)>, MinMaxError>
+    ) -> Result<Vec<(RatingType, Box<[usize]>, T::Context)>, MinMaxError>
     where
-        T: Clone,
+        T: GameData + Clone,
         L: EventListener<T>,
         F: Fn() -> bool,
     {
@@ -201,6 +201,11 @@ where
                     path.iter()
                         .map(|&val| usize::try_from(val).unwrap())
                         .collect::<Box<_>>(),
+                    {
+                        stepper.forward_step(path);
+                        let (ctx, _) = stepper.backward_step();
+                        ctx
+                    },
                 )
             })
             .collect::<Vec<_>>())
@@ -483,7 +488,7 @@ mod test {
 
     use crate::{
         engine_stepper::EngineStepper,
-        test::{RateAndMapZeroOne, ZeroOneGame},
+        test::{RateAndMapZeroOne, ZeroOneContext, ZeroOneGame},
         IndexType, MinMaxAlgorithm, Params, SlidingParams,
     };
 
@@ -672,13 +677,13 @@ mod test {
         alg.params.first_cut_delay_depth = 1;
         let data = ZeroOneGame::new(true, 8);
         let mut engine = Engine::new_logging(2, data);
-        assert_eq!(alg.run(&engine), Ok((1, Box::from([0, 0]))));
+        assert_eq!(alg.run(&engine), Ok((1, Box::from([0, 0]), ZeroOneContext::ZeroAnd)));
 
         let sliding = SlidingParams::with_defaults(2, 1, 4, 4, 4, 2, 4);
         let params = Params::new(2, sliding.clone());
         let mut alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         alg.params.first_cut_delay_depth = 1;
-        assert_eq!(alg.run(&engine), Ok((4, Box::from([0, 0]))));
+        assert_eq!(alg.run(&engine), Ok((4, Box::from([0, 0]), ZeroOneContext::ZeroAnd)));
 
         match engine.pull() {
             GameState::PendingDecision(dec) => dec.select_option(0),
@@ -692,6 +697,6 @@ mod test {
             GameState::PendingEffect(eff) => eff.all_effects(),
             _ => unreachable!(),
         }
-        assert_eq!(alg.run(&engine), Ok((-4, Box::from([1]))));
+        assert_eq!(alg.run(&engine), Ok((-4, Box::from([1]), ZeroOneContext::Flat)));
     }
 }

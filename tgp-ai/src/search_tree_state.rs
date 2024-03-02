@@ -406,7 +406,8 @@ mod test {
                 vec![(rating + 1, indizes(&[0])), (rating + 3, indizes(&[1]))],
             );
             ControlFlow::<()>::Continue(())
-        }).unwrap();
+        })
+        .unwrap();
         sts.extend();
         assert_eq!(sts.tree.last().unwrap().len(), 8);
 
@@ -417,7 +418,8 @@ mod test {
             let tree_rating = tree_state.entry(t_index).rating;
             assert_eq!(expected_rating, tree_rating);
             ControlFlow::<()>::Continue(())
-        }).unwrap();
+        })
+        .unwrap();
 
         sts.update_ratings();
         assert_eq!(
