@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, marker::PhantomData};
+use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, marker::PhantomData, ops::ControlFlow};
 
 use tgp::{
     engine::{logging::EventLog, CloneError, Engine, EventListener, GameEngine},
@@ -51,6 +51,34 @@ impl From<CloneError> for InvalidEngineState {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MinMaxError {
+    PendingEffect,
+    FollowUp,
+    Finished,
+    Cancelled,
+}
+
+impl MinMaxError {
+    pub fn into_engine_state_error(self) -> Option<InvalidEngineState> {
+        match self {
+            MinMaxError::PendingEffect => Some(InvalidEngineState::PendingEffect),
+            MinMaxError::FollowUp => Some(InvalidEngineState::FollowUp),
+            MinMaxError::Finished => Some(InvalidEngineState::Finished),
+            MinMaxError::Cancelled => None,
+        }
+    }
+}
+
+impl From<CloneError> for MinMaxError {
+    fn from(e: CloneError) -> Self {
+        match e {
+            CloneError::PendingEffect => MinMaxError::PendingEffect,
+            CloneError::FollowUp => MinMaxError::FollowUp,
+        }
+    }
+}
+
 pub struct MinMaxAlgorithm<T: GameData + Debug, R: RateAndMap<T>>
 where
     T::EffectType: RevEffect<T>,
@@ -96,7 +124,21 @@ where
         T: Clone,
         L: EventListener<T>,
     {
-        let ratings = self.run_all_ratings(&engine)?;
+        self.run_with_cancellation(engine, || false)
+            .map_err(|e| e.into_engine_state_error().unwrap())
+    }
+
+    pub fn run_with_cancellation<L, F>(
+        &self,
+        engine: &Engine<T, L>,
+        should_cancel: F,
+    ) -> Result<(RatingType, Box<[usize]>), MinMaxError>
+    where
+        T: Clone,
+        L: EventListener<T>,
+        F: Fn() -> bool,
+    {
+        let ratings = self.run_all_ratings_with_cancellation(&engine, should_cancel)?;
         let (rating, indizes) = ratings
             .into_iter()
             .max_by(|(r1, _), (r2, _)| r1.cmp(r2))
@@ -106,7 +148,7 @@ where
         Ok((rating, indizes))
     }
 
-    pub fn run_all_ratings<L: EventListener<T>>(
+    pub fn run_all_ratings<L>(
         &self,
         engine: &Engine<T, L>,
     ) -> Result<Vec<(RatingType, Box<[usize]>)>, InvalidEngineState>
@@ -114,8 +156,22 @@ where
         T: Clone,
         L: EventListener<T>,
     {
+        self.run_all_ratings_with_cancellation(engine, || false)
+            .map_err(|e| e.into_engine_state_error().unwrap())
+    }
+
+    pub fn run_all_ratings_with_cancellation<L, F>(
+        &self,
+        engine: &Engine<T, L>,
+        should_cancel: F,
+    ) -> Result<Vec<(RatingType, Box<[usize]>)>, MinMaxError>
+    where
+        T: Clone,
+        L: EventListener<T>,
+        F: Fn() -> bool,
+    {
         if engine.is_finished() {
-            return Err(InvalidEngineState::Finished);
+            return Err(MinMaxError::Finished);
         }
         let mut engine = engine.try_clone_with_listener(EventLog::new())?;
 
@@ -131,7 +187,7 @@ where
             .saturating_sub(self.params.first_cut_delay_depth)
             + 1;
         for _ in 0..num_runs {
-            self.extend_search_tree(&mut stepper, &mut tree, player);
+            self.extend_search_tree(&mut stepper, &mut tree, player, &should_cancel)?;
             if tree.root_moves().count() == 1 {
                 break;
             }
@@ -150,12 +206,13 @@ where
             .collect::<Vec<_>>())
     }
 
-    fn extend_search_tree(
+    fn extend_search_tree<F: Fn() -> bool>(
         &self,
         stepper: &mut EngineStepper<T>,
         tree: &mut SearchTreeState,
         player: usize,
-    ) {
+        should_cancel: F,
+    ) -> Result<(), MinMaxError> {
         assert!(tree.depth() < 2 * self.params.depth);
         let depth = {
             let mut depth = self.params.first_cut_delay_depth;
@@ -181,10 +238,16 @@ where
             for (rating, index, children) in new_moves {
                 tree.push_child(t_index, rating, index, children);
             }
-        });
+            if should_cancel() {
+                ControlFlow::Break(MinMaxError::Cancelled)
+            } else {
+                ControlFlow::Continue(())
+            }
+        })?;
         // TODO: end of game handling
         tree.extend();
         tree.update_ratings();
+        Ok(())
     }
 
     fn collect_recursive(

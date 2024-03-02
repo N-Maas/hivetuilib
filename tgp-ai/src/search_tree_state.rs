@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, mem, usize};
+use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, mem, ops::ControlFlow, usize};
 
 use tgp::{GameData, RevEffect};
 
@@ -209,47 +209,54 @@ impl SearchTreeState {
     }
 
     /// f must return the engine in the same state as before
-    pub fn for_each_leaf<T: GameData + Debug, F>(
+    pub fn for_each_leaf<T: GameData + Debug, F, E>(
         &mut self,
         stepper: &mut EngineStepper<T>,
         mut function: F,
-    ) where
+    ) -> Result<(), E>
+    where
         T::EffectType: RevEffect<T>,
-        F: FnMut(&mut Self, &mut EngineStepper<T>, TreeIndex),
+        F: FnMut(&mut Self, &mut EngineStepper<T>, TreeIndex) -> ControlFlow<E>,
     {
         let mut children_start = vec![0; self.tree.len()];
-        self.for_each_leaf_impl(stepper, &mut function, TreeIndex(0, 0), &mut children_start);
+        self.for_each_leaf_impl(stepper, &mut function, TreeIndex(0, 0), &mut children_start)
     }
 
-    fn for_each_leaf_impl<T: GameData + Debug, F>(
+    fn for_each_leaf_impl<T: GameData + Debug, F, E>(
         &mut self,
         stepper: &mut EngineStepper<T>,
         function: &mut F,
         t_index: TreeIndex,
         children_start: &mut Vec<usize>,
-    ) where
+    ) -> Result<(), E>
+    where
         T::EffectType: RevEffect<T>,
-        F: FnMut(&mut Self, &mut EngineStepper<T>, TreeIndex),
+        F: FnMut(&mut Self, &mut EngineStepper<T>, TreeIndex) -> ControlFlow<E>,
     {
         let depth = t_index.0 + 1;
         if depth == self.tree.len() {
-            function(self, stepper, t_index);
-        } else {
-            let offset = children_start[t_index.0];
-            for child in 0..self.entry(t_index).num_children() {
-                let entry = &self.get_level(depth)[child + offset];
-                let num_children = entry.num_children();
-                stepper.forward_step(&entry.indizes);
-                self.for_each_leaf_impl(
-                    stepper,
-                    function,
-                    TreeIndex(depth, child + offset),
-                    children_start,
-                );
-                stepper.backward_step();
-                children_start[depth] += num_children;
-            }
+            return match function(self, stepper, t_index) {
+                ControlFlow::Continue(()) => Ok(()),
+                ControlFlow::Break(err) => Err(err),
+            };
         }
+
+        let offset = children_start[t_index.0];
+        for child in 0..self.entry(t_index).num_children() {
+            let entry = &self.get_level(depth)[child + offset];
+            let num_children = entry.num_children();
+            stepper.forward_step(&entry.indizes);
+            let err = self.for_each_leaf_impl(
+                stepper,
+                function,
+                TreeIndex(depth, child + offset),
+                children_start,
+            );
+            stepper.backward_step();
+            children_start[depth] += num_children;
+            err?;
+        }
+        Ok(())
     }
 
     fn get_level(&self, index: usize) -> &[TreeEntry] {
