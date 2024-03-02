@@ -274,6 +274,8 @@ impl SearchTreeState {
 
 #[cfg(test)]
 mod test {
+    use std::ops::ControlFlow;
+
     use tgp::engine::Engine;
 
     use crate::{
@@ -403,7 +405,8 @@ mod test {
                 indizes(&[1, 1]),
                 vec![(rating + 1, indizes(&[0])), (rating + 3, indizes(&[1]))],
             );
-        });
+            ControlFlow::<()>::Continue(())
+        }).unwrap();
         sts.extend();
         assert_eq!(sts.tree.last().unwrap().len(), 8);
 
@@ -413,7 +416,8 @@ mod test {
                 stepper.data().num_ones as RatingType - stepper.data().num_zeros as RatingType;
             let tree_rating = tree_state.entry(t_index).rating;
             assert_eq!(expected_rating, tree_rating);
-        });
+            ControlFlow::<()>::Continue(())
+        }).unwrap();
 
         sts.update_ratings();
         assert_eq!(
