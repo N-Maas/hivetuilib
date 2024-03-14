@@ -43,14 +43,16 @@ impl TreeEntry {
 pub(crate) struct RetainedMoves<'a> {
     inner: &'a mut Vec<usize>,
     offset: usize,
+    max: usize,
 }
 
 impl<'a> RetainedMoves<'a> {
-    fn new(inner: &'a mut Vec<usize>, offset: usize) -> Self {
-        Self { inner, offset }
+    fn new(inner: &'a mut Vec<usize>, offset: usize, max: usize) -> Self {
+        Self { inner, offset, max }
     }
 
     pub(crate) fn add(&mut self, val: usize) {
+        assert!(val < self.max);
         assert!(self.inner.last().map_or(true, |&x| val + self.offset > x));
         self.inner.push(val + self.offset);
     }
@@ -174,21 +176,25 @@ impl SearchTreeState {
             // compute retained children
             for (j, entry) in old_moves.iter_mut().enumerate() {
                 // if the entry is retained, continue to prune its children
-                if retained.peek() == Some(&j) {
+                let added_offset = if retained.peek() == Some(&j) {
                     let old_len = current_retained.len();
                     if entry.num_children() > 1 {
                         retain_fn(
                             i - 1,
                             &moves[offset..offset + entry.num_children()],
-                            RetainedMoves::new(&mut current_retained, offset),
+                            RetainedMoves::new(&mut current_retained, offset, entry.num_children()),
                         );
                     } else if entry.num_children() == 1 {
                         current_retained.push(offset);
                     }
                     retained.next();
+                    let added_offset = entry.num_children as usize;
                     entry.num_children = (current_retained.len() - old_len) as u32;
-                }
-                offset += entry.num_children();
+                    added_offset
+                } else {
+                    entry.num_children()
+                };
+                offset += added_offset;
             }
 
             // remove pruned elements
