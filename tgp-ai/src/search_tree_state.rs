@@ -51,7 +51,7 @@ impl<'a> RetainedMoves<'a> {
     }
 
     pub(crate) fn add(&mut self, val: usize) {
-        debug_assert!(self.inner.last().map_or(true, |&x| val > x));
+        assert!(self.inner.last().map_or(true, |&x| val + self.offset > x));
         self.inner.push(val + self.offset);
     }
 }
@@ -166,19 +166,27 @@ impl SearchTreeState {
         let mut old_retained = vec![0];
         let mut current_retained = Vec::new();
         for i in 1..self.tree.len() {
-            let moves = &self.tree[i];
+            let (left, right) = self.tree.split_at_mut(i);
+            let old_moves = left.last_mut().unwrap();
+            let moves = right.first().unwrap();
             let mut offset = 0;
             let mut retained = old_retained.iter().copied().peekable();
             // compute retained children
-            for (j, entry) in self.tree[i - 1].iter().enumerate() {
+            for (j, entry) in old_moves.iter_mut().enumerate() {
                 // if the entry is retained, continue to prune its children
                 if retained.peek() == Some(&j) {
-                    retain_fn(
-                        i,
-                        &moves[offset..offset + entry.num_children()],
-                        RetainedMoves::new(&mut current_retained, offset),
-                    );
+                    let old_len = current_retained.len();
+                    if entry.num_children() > 1 {
+                        retain_fn(
+                            i - 1,
+                            &moves[offset..offset + entry.num_children()],
+                            RetainedMoves::new(&mut current_retained, offset),
+                        );
+                    } else if entry.num_children() == 1 {
+                        current_retained.push(offset);
+                    }
                     retained.next();
+                    entry.num_children = (current_retained.len() - old_len) as u32;
                 }
                 offset += entry.num_children();
             }
@@ -310,6 +318,12 @@ mod test {
             indizes(&[2]),
             vec![(-111, indizes(&[2])), (0, indizes(&[0]))],
         );
+        sts.push_child(
+            TreeIndex(0, 0),
+            77,
+            indizes(&[0]),
+            vec![(123, indizes(&[])), (-123, indizes(&[]))],
+        );
         sts.extend();
 
         assert_eq!(
@@ -317,7 +331,7 @@ mod test {
             vec![TreeEntry {
                 rating: 0,
                 indizes: indizes(&[]),
-                num_children: 3
+                num_children: 4
             },]
         );
         assert_eq!(
@@ -337,6 +351,11 @@ mod test {
                     rating: -11,
                     indizes: indizes(&[2]),
                     num_children: 2
+                },
+                TreeEntry {
+                    rating: 77,
+                    indizes: indizes(&[0]),
+                    num_children: 2
                 }
             ]
         );
@@ -347,6 +366,8 @@ mod test {
                 TreeEntry::new((333, indizes(&[3]))),
                 TreeEntry::new((-111, indizes(&[2]))),
                 TreeEntry::new((0, indizes(&[0]))),
+                TreeEntry::new((123, indizes(&[]))),
+                TreeEntry::new((-123, indizes(&[]))),
             ]
         );
 
@@ -359,13 +380,26 @@ mod test {
         });
         assert_eq!(
             sts.tree[1],
-            vec![TreeEntry {
-                rating: 33,
-                indizes: indizes(&[3]),
-                num_children: 1
-            }]
+            vec![
+                TreeEntry {
+                    rating: 33,
+                    indizes: indizes(&[3]),
+                    num_children: 1
+                },
+                TreeEntry {
+                    rating: 77,
+                    indizes: indizes(&[0]),
+                    num_children: 1
+                }
+            ]
         );
-        assert_eq!(sts.tree[2], vec![TreeEntry::new((333, indizes(&[3]))),]);
+        assert_eq!(
+            sts.tree[2],
+            vec![
+                TreeEntry::new((333, indizes(&[3]))),
+                TreeEntry::new((123, indizes(&[])))
+            ]
+        );
     }
 
     #[test]
