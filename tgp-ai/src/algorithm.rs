@@ -1,4 +1,7 @@
-use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, marker::PhantomData, ops::ControlFlow};
+use std::{
+    cmp::Ordering, convert::TryFrom, fmt::Debug, fs::OpenOptions, marker::PhantomData,
+    ops::ControlFlow,
+};
 
 use tgp::{
     engine::{logging::EventLog, CloneError, Engine, EventListener, GameEngine},
@@ -105,12 +108,26 @@ where
     Ok(result)
 }
 
+pub struct PruningInput {
+    pub total_depth: usize,
+    pub current_depth: usize,
+    pub num_branches: usize,
+}
+
+pub enum PruningKind {
+    KeepAll,
+    KeepN(usize),
+    KeepByDiff(RatingType),
+    WithinBounds(usize, usize, RatingType),
+}
+
 pub struct MinMaxAlgorithm<T: GameData + Debug, R: RateAndMap<T>>
 where
     T::EffectType: RevEffect<T>,
 {
     params: Params,
     rate_and_map: R,
+    pruning_fn: Box<dyn Fn(PruningInput) -> PruningKind>,
     _t: PhantomData<T>,
 }
 
@@ -120,10 +137,17 @@ impl<T: GameData + Debug, R: RateAndMap<T>> MinMaxAlgorithm<T, R>
 where
     T::EffectType: RevEffect<T>,
 {
-    pub fn new(params: Params, rate_and_map: R) -> Self {
-        Self {
+    pub fn new(params: Params, rate_and_map: R) -> MinMaxAlgorithm<T, R> {
+        Self::with_pruning(params, rate_and_map, |_| PruningKind::KeepAll)
+    }
+    pub fn with_pruning<P>(params: Params, rate_and_map: R, pruning_fn: P) -> MinMaxAlgorithm<T, R>
+    where
+        P: Fn(PruningInput) -> PruningKind + 'static,
+    {
+        MinMaxAlgorithm {
             params,
             rate_and_map,
+            pruning_fn: Box::new(pruning_fn),
             _t: PhantomData,
         }
     }
@@ -213,11 +237,11 @@ where
             .saturating_sub(self.params.first_cut_delay_depth)
             + 1;
         for _ in 0..num_runs {
+            self.prune(&mut tree);
             self.extend_search_tree(&mut stepper, &mut tree, player, &should_cancel)?;
             if tree.root_moves().count() == 1 {
                 break;
             }
-            // TODO: prune
         }
         Ok(tree
             .root_moves()
@@ -476,6 +500,48 @@ where
         } else {
             val
         }
+    }
+
+    fn prune(&self, tree: &mut SearchTreeState) {
+        let depth = tree.depth();
+        let mut buffer = Vec::new();
+        tree.prune(|level, moves, mut retained| {
+            let sign = if level % 2 == 0 { 1 } else { -1 };
+            let mut within_bounds = |min, max, diff| {
+                assert!(diff >= 0);
+                buffer.clear();
+                buffer.extend(moves.iter().enumerate().map(|(i, t)| (i, sign * t.rating)));
+                buffer.sort_unstable_by_key(|&(_, r)| -r); // high ratings first
+                assert!(buffer.len() > 1 && buffer[0].1 >= buffer[1].1);
+                let (_, best) = buffer[0];
+                let num_retained = {
+                    let mut index = min;
+                    while index < buffer.len() && index < max {
+                        let (_, r) = buffer[index];
+                        if r + diff < best {
+                            break;
+                        }
+                        index += 1;
+                    }
+                    index
+                };
+                buffer.truncate(num_retained);
+                buffer.sort_unstable_by_key(|&(i, _)| i);
+                for &(i, _) in buffer.iter() {
+                    retained.add(i);
+                }
+            };
+            match (self.pruning_fn)(PruningInput {
+                total_depth: depth,
+                current_depth: level,
+                num_branches: moves.len(),
+            }) {
+                PruningKind::KeepAll => (0..moves.len()).for_each(|i| retained.add(i)),
+                PruningKind::KeepN(num) => within_bounds(num, num, 0),
+                PruningKind::KeepByDiff(diff) => within_bounds(0, moves.len(), diff),
+                PruningKind::WithinBounds(min, max, diff) => within_bounds(min, max, diff),
+            }
+        });
     }
 
     #[inline]

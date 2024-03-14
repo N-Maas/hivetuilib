@@ -1,14 +1,11 @@
-use std::{
-    convert::TryFrom,
-    fmt::{self, Debug},
-};
+use std::fmt::{self, Debug};
 
 use tgp::{
     engine::{logging::EventLog, Engine, GameEngine, GameState},
     GameData, RevEffect,
 };
 
-use crate::{IndexType, INTERNAL_ERROR};
+use crate::INTERNAL_ERROR;
 
 // TODO: abstract over multiple decisions by same player? --> is probably hard
 pub(crate) struct EngineStepper<'a, T: GameData + Debug>
