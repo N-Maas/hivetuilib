@@ -336,7 +336,7 @@ where
             .map(|(_, indizes, eq)| {
                 stepper.forward_step(&indizes);
                 let (rating, children) =
-                    self.collect_and_cut(depth - 1, stepper, player, sliding.next());
+                    self.collect_and_cut(depth - 1, stepper, player, delay_depth, sliding.next());
                 stepper.backward_step();
                 (rating, indizes, eq, children)
             })
@@ -366,7 +366,7 @@ where
                     {
                         stepper.forward_step(&m_idz);
                         let (m_rating, m_children) =
-                            self.collect_and_cut(depth - 1, stepper, player, sliding.next());
+                            self.collect_and_cut(depth - 1, stepper, player, delay_depth, sliding.next());
                         if compare(m_rating, rating) == Ordering::Less {
                             rating = m_rating;
                             indizes = m_idz;
@@ -385,6 +385,7 @@ where
         depth: usize,
         stepper: &mut EngineStepper<T>,
         player: usize,
+        delay_depth: usize,
         sliding: Sliding,
     ) -> (RatingType, RatingList) {
         if depth == 0 || stepper.is_finished() {
@@ -414,7 +415,7 @@ where
         }
 
         // cut the moves to the defined limit
-        if depth >= (2 * self.params.first_cut_delay_depth - 1) {
+        if depth >= (2 * delay_depth - 1) {
             moves.sort_unstable_by(|&(r1, _, _), &(r2, _, _)| compare(r1, r2));
             let min = moves.first().unwrap().0;
             moves.retain(|(rating, _, _)| {
@@ -531,6 +532,7 @@ where
                     retained.add(i);
                 }
             };
+            assert!(level < depth);
             match (self.pruning_fn)(PruningInput {
                 total_depth: depth,
                 current_depth: level,
@@ -616,42 +618,41 @@ mod test {
     fn collect_and_cut_test() {
         let sliding = SlidingParams::with_defaults(4, 2, 4, 4, 2, 2, 4);
         let params = Params::new(4, sliding.clone());
-        let mut alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
+        let alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         let data = ZeroOneGame::new(false, 6);
         let mut engine = Engine::new_logging(2, data);
         let mut stepper = EngineStepper::new(&mut engine);
 
         assert_eq!(
-            alg.collect_and_cut(0, &mut stepper, 0, sliding.get(1..)),
+            alg.collect_and_cut(0, &mut stepper, 0, 2, sliding.get(1..)),
             (0, Vec::new())
         );
         assert_eq!(
-            alg.collect_and_cut(0, &mut stepper, 1, sliding.get(1..)),
+            alg.collect_and_cut(0, &mut stepper, 1, 2, sliding.get(1..)),
             (0, Vec::new())
         );
         assert_eq!(
-            alg.collect_and_cut(1, &mut stepper, 0, sliding.get(1..)),
+            alg.collect_and_cut(1, &mut stepper, 0, 2, sliding.get(1..)),
             (1, vec![(1, indizes(&[0])), (-1, indizes(&[1]))])
         );
         assert_eq!(
-            alg.collect_and_cut(1, &mut stepper, 1, sliding.get(1..)),
+            alg.collect_and_cut(1, &mut stepper, 1, 2, sliding.get(1..)),
             (-1, vec![(-1, indizes(&[0])), (1, indizes(&[1]))])
         );
         assert_eq!(
-            alg.collect_and_cut(2, &mut stepper, 0, sliding.get(1..)),
+            alg.collect_and_cut(2, &mut stepper, 0, 2, sliding.get(1..)),
             (-1, vec![(-1, indizes(&[0])), (-9, indizes(&[1]))])
         );
         assert_eq!(
-            alg.collect_and_cut(2, &mut stepper, 1, sliding.get(1..)),
+            alg.collect_and_cut(2, &mut stepper, 1, 2, sliding.get(1..)),
             (1, vec![(1, indizes(&[0])), (9, indizes(&[1]))])
         );
-        alg.params.first_cut_delay_depth = 1;
         assert_eq!(
-            alg.collect_and_cut(2, &mut stepper, 0, sliding.get(1..)),
+            alg.collect_and_cut(2, &mut stepper, 0, 1, sliding.get(1..)),
             (-1, vec![(-1, indizes(&[0]))])
         );
         assert_eq!(
-            alg.collect_and_cut(2, &mut stepper, 1, sliding.get(1..)),
+            alg.collect_and_cut(2, &mut stepper, 1, 1, sliding.get(1..)),
             (1, vec![(1, indizes(&[0]))])
         );
     }
