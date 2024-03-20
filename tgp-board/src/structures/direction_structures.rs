@@ -23,6 +23,7 @@ macro_rules! implAdjacencyStructure {
 
 macro_rules! implNeighborhoodStructure {
     () => {
+        #[inline(always)]
         fn neighbor_count(&self, board: &B, index: B::Index) -> usize {
             D::enumerate_all()
                 .filter_map(|d| self.next(board, index, d))
@@ -30,11 +31,15 @@ macro_rules! implNeighborhoodStructure {
                 .count()
         }
 
-        fn neighbors(&self, board: &B, index: B::Index) -> Vec<B::Index> {
+        #[inline(always)]
+        fn neighbors<'a>(
+            &'a self,
+            board: &'a B,
+            index: B::Index,
+        ) -> impl Iterator<Item = B::Index> + 'a {
             D::enumerate_all()
-                .filter_map(|d| self.next(board, index, d))
+                .filter_map(move |d| self.next(board, index, d))
                 .filter(|i| board.contains(*i))
-                .collect()
         }
     };
 }
@@ -67,6 +72,7 @@ where
 {
     type Direction = D;
 
+    #[inline(always)]
     fn next(&self, board: &B, index: B::Index, direction: D) -> Option<B::Index> {
         B::Index::from_offset(index.apply_offset(direction.offset())).filter(|i| board.contains(*i))
     }
@@ -121,6 +127,7 @@ where
 {
     type Direction = D;
 
+    #[inline(always)]
     fn next(&self, board: &B, index: B::Index, direction: D) -> Option<B::Index> {
         Some(board.wrapped(index.apply_offset(direction.offset())))
     }

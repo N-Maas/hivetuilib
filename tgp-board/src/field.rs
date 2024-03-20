@@ -93,7 +93,7 @@ where
 
 impl<'a, S, B: Board<Structure = S>> Field<'a, B>
 where
-    S: NeighborhoodStructure<B>,
+    S: NeighborhoodStructure<B> + 'a,
 {
     pub fn neighbor_count(self) -> usize {
         self.board
@@ -106,7 +106,6 @@ where
         board
             .structure()
             .neighbors(board, self.index)
-            .into_iter()
             .filter_map(move |i| Self::new(board, i))
     }
 }

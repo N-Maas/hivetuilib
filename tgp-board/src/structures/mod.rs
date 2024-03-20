@@ -13,11 +13,15 @@ pub trait AdjacencyStructure<B: Board> {
 
 pub trait NeighborhoodStructure<B: Board> {
     fn neighbor_count(&self, board: &B, index: B::Index) -> usize {
-        self.neighbors(board, index).len()
+        self.neighbors(board, index).count()
     }
 
     // TODO more efficient than vec?
-    fn neighbors(&self, board: &B, index: B::Index) -> Vec<B::Index>;
+    fn neighbors<'a>(
+        &'a self,
+        board: &'a B,
+        index: B::Index,
+    ) -> impl Iterator<Item = B::Index> + 'a;
 }
 
 pub trait DirectionStructure<B: Board> {
