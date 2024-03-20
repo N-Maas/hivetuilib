@@ -181,20 +181,18 @@ impl<T, I: Into<OpenIndex>, S> IndexMut<I> for OpenBoard<T, S> {
 
 impl<T, S> BoardIndexable for OpenBoard<T, S> {
     type Index = OpenIndex;
+
     // TODO: this is wrong and not performant
-    fn all_indices(&self) -> Vec<OpenIndex> {
+    #[inline(always)]
+    fn all_indices<'a>(&'a self) -> impl Iterator<Item = OpenIndex> + 'a {
         let (dx, dy) = self.offset;
-        self.columns
-            .iter()
-            .enumerate()
-            .flat_map(|(x, col)| {
-                col.iter().enumerate().filter_map(move |(y, field)| {
-                    field
-                        .as_ref()
-                        .map(|_| OpenIndex::from((x as isize - dx, y as isize - dy)))
-                })
+        self.columns.iter().enumerate().flat_map(move |(x, col)| {
+            col.iter().enumerate().filter_map(move |(y, field)| {
+                field
+                    .as_ref()
+                    .map(|_| OpenIndex::from((x as isize - dx, y as isize - dy)))
             })
-            .collect()
+        })
     }
 }
 
@@ -339,7 +337,7 @@ mod test {
         let mut board = OpenBoard::<bool, ()>::with_dimensions(3, 3, ());
         board.insert((1, 0).into(), true);
         board.insert((0, 2).into(), true);
-        let indices = board.all_indices();
+        let indices = board.all_indices().collect::<Vec<_>>();
         assert_eq!(indices.len(), 2);
         assert!(indices.contains(&(1, 0).into()));
         assert!(indices.contains(&(0, 2).into()));

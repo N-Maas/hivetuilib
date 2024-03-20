@@ -88,10 +88,10 @@ impl<T, I: Into<Index2D>, S> IndexMut<I> for MatrixBoard<T, S> {
 
 impl<T, S> BoardIndexable for MatrixBoard<T, S> {
     type Index = Index2D;
-    fn all_indices(&self) -> Vec<Index2D> {
-        (0..self.num_cols)
-            .flat_map(|x| (0..self.num_rows).map(move |y| Index2D { x, y }))
-            .collect()
+
+    #[inline(always)]
+    fn all_indices<'a>(&'a self) -> impl Iterator<Item = Index2D> + 'a {
+        (0..self.num_cols).flat_map(|x| (0..self.num_rows).map(move |y| Index2D { x, y }))
     }
 }
 

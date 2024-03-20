@@ -100,7 +100,8 @@ where
 {
     type Index = B::Index;
 
-    fn all_indices(&self) -> Vec<Self::Index> {
+    #[inline(always)]
+    fn all_indices<'a>(&'a self) -> impl Iterator<Item = Self::Index> + 'a {
         self.board.all_indices()
     }
 }

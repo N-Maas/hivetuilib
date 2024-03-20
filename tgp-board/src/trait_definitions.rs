@@ -1,4 +1,4 @@
-use std::{fmt::Debug, marker::PhantomData, vec::IntoIter};
+use std::fmt::Debug;
 
 use crate::field::Field;
 
@@ -37,9 +37,7 @@ pub trait Board: BoardIndexable {
 
     fn get(&self, index: Self::Index) -> Option<&Self::Content>;
 
-    fn iter_fields<'a>(
-        &'a self,
-    ) -> <&'a Self as BoardIntoFieldIter<Self::Index, Self::Content>>::IntoIter
+    fn iter_fields<'a>(&'a self) -> impl Iterator<Item = Field<'a, Self>>
     where
         Self: Sized,
         Self::Content: 'a,
@@ -49,7 +47,7 @@ pub trait Board: BoardIndexable {
 
     // TODO: required?
     // TODO: iter_mut impossible to define in trait currently
-    fn iter<'a>(&'a self) -> <&'a Self as BoardIntoIter<Self::Index, Self::Content>>::IntoIter
+    fn iter<'a>(&'a self) -> impl Iterator<Item = &'a Self::Content>
     where
         Self: Sized,
         Self::Content: 'a,
@@ -70,9 +68,8 @@ macro_rules! implBoardIntoIter {
     ($trait:ident for $name:ident, $call:ident, $out:ty, $access:ident) => {
         pub trait $trait<I, T> {
             type Output;
-            type IntoIter: Iterator<Item = Self::Output>;
 
-            fn $call(self) -> Self::IntoIter;
+            fn $call(self) -> impl Iterator<Item = Self::Output>;
         }
 
         impl<'a, B: Board> $trait<B::Index, B::Content> for &'a B
@@ -80,37 +77,9 @@ macro_rules! implBoardIntoIter {
             B::Content: 'a,
         {
             type Output = $out;
-            type IntoIter = $name<'a, B>;
 
-            fn $call(self) -> Self::IntoIter {
-                Self::IntoIter {
-                    board: self,
-                    iter: self.all_indices().into_iter(),
-                    _f: PhantomData,
-                }
-            }
-        }
-
-        pub struct $name<'a, B: Board> {
-            board: &'a B,
-            iter: IntoIter<B::Index>,
-            _f: PhantomData<B::Content>,
-        }
-
-        impl<'a, B: Board> Iterator for $name<'a, B>
-        where
-            B::Content: 'a,
-        {
-            type Item = $out;
-
-            #[inline]
-            fn next(&mut self) -> Option<Self::Item> {
-                self.iter.next().map(|idx| self.board.$access(idx).unwrap())
-            }
-
-            #[inline]
-            fn size_hint(&self) -> (usize, Option<usize>) {
-                self.iter.size_hint()
+            fn $call(self) -> impl Iterator<Item = Self::Output> {
+                self.all_indices().map(|idx| self.$access(idx).unwrap())
             }
         }
     };
@@ -143,7 +112,7 @@ where
 pub trait BoardIndexable {
     type Index: BoardIdxType;
 
-    fn all_indices(&self) -> Vec<Self::Index>;
+    fn all_indices<'a>(&'a self) -> impl Iterator<Item = Self::Index> + 'a;
 
     // fn enumerate_mut(&mut self) -> Vec<(I, &mut Self::Content)>;
 }

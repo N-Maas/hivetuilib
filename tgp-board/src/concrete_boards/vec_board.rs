@@ -69,8 +69,9 @@ impl<T, I: Into<Index1D>, S> IndexMut<I> for VecBoard<T, S> {
 impl<T, S> BoardIndexable for VecBoard<T, S> {
     type Index = Index1D;
 
-    fn all_indices(&self) -> Vec<Index1D> {
-        (0..self.content.len()).map(Index1D::from).collect()
+    #[inline(always)]
+    fn all_indices<'a>(&'a self) -> impl Iterator<Item = Index1D> + 'a {
+        (0..self.content.len()).map(Index1D::from)
     }
 }
 
