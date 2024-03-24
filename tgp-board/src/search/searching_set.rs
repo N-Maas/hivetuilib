@@ -1,3 +1,4 @@
+use std::fmt::{self, Debug};
 use std::iter::FromIterator;
 
 use crate::{structures::NeighborhoodStructure, Board, BoardToMap, Field, IndexMap};
@@ -9,10 +10,21 @@ use super::{FieldSearchResult, SetWrapper};
 // TODO: consider laziness
 // TODO: hooks
 // TODO: default value for M possible?
-#[derive(Debug, Eq)]
+#[derive(Eq)]
 pub struct SearchingSet<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
     base_set: SetWrapper<M>,
     board: &'a B,
+}
+
+impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Debug for SearchingSet<'a, M, B>
+where
+    M: Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SearchingSet")
+            .field("base_set", &self.base_set)
+            .finish()
+    }
 }
 
 impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> PartialEq
