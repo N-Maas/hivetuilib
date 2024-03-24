@@ -365,8 +365,13 @@ where
                         .take(sliding.equivalency_class_limit())
                     {
                         stepper.forward_step(&m_idz);
-                        let (m_rating, m_children) =
-                            self.collect_and_cut(depth - 1, stepper, player, delay_depth, sliding.next());
+                        let (m_rating, m_children) = self.collect_and_cut(
+                            depth - 1,
+                            stepper,
+                            player,
+                            delay_depth,
+                            sliding.next(),
+                        );
                         if compare(m_rating, rating) == Ordering::Less {
                             rating = m_rating;
                             indizes = m_idz;
