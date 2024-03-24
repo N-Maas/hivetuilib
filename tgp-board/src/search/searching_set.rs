@@ -3,7 +3,7 @@ use std::iter::FromIterator;
 
 use crate::{structures::NeighborhoodStructure, Board, BoardToMap, Field, IndexMap};
 
-use super::{FieldSearchResult, SetWrapper};
+use super::{FieldSearchIter, SetWrapper};
 
 // Equally applicable to SearchingTree:
 // TODO: method for removing field?!
@@ -14,6 +14,7 @@ use super::{FieldSearchResult, SetWrapper};
 pub struct SearchingSet<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
     base_set: SetWrapper<M>,
     board: &'a B,
+    buffer: Vec<B::Index>,
 }
 
 impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Debug for SearchingSet<'a, M, B>
@@ -45,6 +46,7 @@ where
         Self {
             base_set: self.base_set.clone(),
             board: self.board,
+            buffer: Vec::new(),
         }
     }
 }
@@ -57,6 +59,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         Self {
             base_set: board.get_index_map().into(),
             board,
+            buffer: Vec::new(),
         }
     }
 
@@ -64,6 +67,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         Self {
             base_set: map.into(),
             board,
+            buffer: Vec::new(),
         }
     }
 
@@ -86,7 +90,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         if !self.board.contains(idx) {
             panic!("Invalid index provided: {:?}", idx);
         }
-        self.base_insert(idx)
+        self.base_set.insert(idx)
     }
 
     pub fn iter(&self) -> Iter<'a, M, B> {
@@ -102,27 +106,45 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
 
     // ----- the search API -----
     /// Returns true, if at least one field was added.
-    pub fn extend<F>(&mut self, map_fields: F) -> bool
+    pub fn extend<F, Iter>(&mut self, map_fields: F) -> bool
     where
-        F: FnMut(Field<B>) -> FieldSearchResult<B::Index>,
+        F: FnMut(Field<B>) -> Iter,
+        Iter: FieldSearchIter<B::Index>,
     {
-        self.extend_helper(Self::apply_mapping(self.iter(), map_fields))
+        self.new_via_map(map_fields);
+        self.extend_helper()
     }
 
     /// Returns true, if at least one field was added.
     ///
     /// Note: The closure must not use interior mutability.
-    pub fn extend_repeated<F>(&mut self, map_fields: F) -> bool
+    pub fn extend_repeated<F, Iter>(&mut self, map_fields: F) -> bool
     where
-        F: Fn(Field<B>) -> FieldSearchResult<B::Index>,
+        F: Fn(Field<B>) -> Iter,
+        Iter: FieldSearchIter<B::Index>,
+    {
+        self.extend_repeated_impl(|f, buffer| buffer.extend(map_fields(f).into()))
+    }
+
+    fn extend_repeated_impl<F>(&mut self, map_fields: F) -> bool
+    where
+        F: Fn(Field<B>, &mut Vec<B::Index>),
     {
         let mut success = false;
-        let mut result = Self::apply_mapping(self.iter(), &map_fields);
         let mut queued = Vec::new();
+        for f in self.iter() {
+            map_fields(f, &mut self.buffer);
+        }
         loop {
             queued.clear();
             // insert into set and queue in parallel
-            queued.extend(result.iter().filter(|i| self.base_insert(*i)));
+            queued.extend(self.buffer.iter().filter(|&&i| {
+                if !self.board.contains(i) {
+                    panic!("Field with invalid index: {:?}", i);
+                }
+                self.base_set.insert(i)
+            }));
+            self.buffer.clear();
             if queued.is_empty() {
                 return success;
             } else {
@@ -130,33 +152,35 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
             }
 
             // only read the values from the last iteration to avoid quadratic complexity
-            result = Self::apply_mapping(
-                // unwrap can not fail as the index was checked in base_insert
-                queued.iter().map(|i| self.board.get_field(*i).unwrap()),
-                &map_fields,
-            );
+            for f in queued
+                .iter()
+                // we already checked that the index is valid
+                .map(|i| self.board.get_field(*i).unwrap())
+            {
+                map_fields(f, &mut self.buffer);
+            }
         }
     }
 
-    /// Returns true, if at least one field was added.
-    pub fn extend_with<F>(&mut self, collect: F) -> bool
-    where
-        F: FnOnce(&Self) -> FieldSearchResult<B::Index>,
-    {
-        self.extend_helper(collect(self))
-    }
+    // /// Returns true, if at least one field was added.
+    // pub fn extend_with<F>(&mut self, collect: F) -> bool
+    // where
+    //     F: FnOnce(&Self) -> FieldSearchResult<B::Index>,
+    // {
+    //     self.extend_helper(collect(self))
+    // }
 
-    /// Returns true, if at least one field was added.
-    pub fn extend_with_repeated<F>(&mut self, mut collect: F) -> bool
-    where
-        F: FnMut(&Self) -> FieldSearchResult<B::Index>,
-    {
-        let mut success = false;
-        while self.extend_with(&mut collect) {
-            success = true;
-        }
-        success
-    }
+    // /// Returns true, if at least one field was added.
+    // pub fn extend_with_repeated<F>(&mut self, mut collect: F) -> bool
+    // where
+    //     F: FnMut(&Self) -> FieldSearchResult<B::Index>,
+    // {
+    //     let mut success = false;
+    //     while self.extend_with(&mut collect) {
+    //         success = true;
+    //     }
+    //     success
+    // }
 
     /// Returns true, if at least one field was added.
     pub fn grow<F>(&mut self, predicate: F) -> bool
@@ -164,7 +188,8 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         F: Fn(Field<B>) -> bool,
         B::Structure: NeighborhoodStructure<B>,
     {
-        self.extend_helper(self.apply_growth(predicate))
+        self.new_via_pred(predicate);
+        self.extend_helper()
     }
 
     /// Returns true, if at least one field was added.
@@ -173,84 +198,81 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
         F: Fn(Field<B>) -> bool,
         B::Structure: NeighborhoodStructure<B>,
     {
-        self.extend_repeated(|f| {
-            f.neighbors()
-                .filter(|f| predicate(*f))
-                .map(|f| f.index())
-                .collect()
+        self.extend_repeated_impl(|f, buffer| {
+            buffer.extend(f.neighbors().filter(|&f| predicate(f)).map(Field::index))
         })
     }
 
-    pub fn replace<F>(&mut self, map_fields: F)
+    pub fn replace<F, Iter>(&mut self, map_fields: F)
     where
-        F: FnMut(Field<B>) -> FieldSearchResult<B::Index>,
+        F: FnMut(Field<B>) -> Iter,
+        Iter: FieldSearchIter<B::Index>,
     {
-        let fields = Self::apply_mapping(self.iter(), map_fields);
-        self.replace_helper(fields)
+        self.new_via_map(map_fields);
+        self.base_set.clear();
+        self.extend_helper();
     }
 
-    pub fn replace_with<F>(&mut self, collect: F)
-    where
-        F: FnOnce(&Self) -> FieldSearchResult<B::Index>,
-    {
-        self.replace_helper(collect(self))
-    }
+    // pub fn replace_with<F>(&mut self, collect: F)
+    // where
+    //     F: FnOnce(&Self) -> FieldSearchResult<B::Index>,
+    // {
+    //     self.replace_helper(collect(self))
+    // }
 
     pub fn step<F>(&mut self, predicate: F)
     where
         F: Fn(Field<B>) -> bool,
         B::Structure: NeighborhoodStructure<B>,
     {
-        self.replace_helper(self.apply_growth(predicate))
+        self.new_via_pred(predicate);
+        self.base_set.clear();
+        self.extend_helper();
     }
 
-    // TODO: we need a clear policy here - is panicking always appropriate?
-    fn base_insert(&mut self, i: B::Index) -> bool {
-        if !self.board.contains(i) {
-            panic!("Field with invalid index: {:?}", i);
-        }
-        self.base_set.insert(i)
-    }
-
-    fn apply_mapping<'b, F>(
-        iter: impl Iterator<Item = Field<'b, B>>,
-        mut map_fields: F,
-    ) -> FieldSearchResult<B::Index>
+    fn new_via_map<F, Iter>(&mut self, mut map_fields: F)
     where
-        F: FnMut(Field<B>) -> FieldSearchResult<B::Index>,
-        B: 'b,
+        F: FnMut(Field<B>) -> Iter,
+        Iter: FieldSearchIter<B::Index>,
     {
-        iter.flat_map(|f| map_fields(f).into_iter()).collect()
+        for index in self.iter().flat_map(|f| map_fields(f).into()) {
+            self.buffer.push(index)
+        }
     }
 
-    // TODO: allow FnMut
-    fn apply_growth<F>(&self, predicate: F) -> FieldSearchResult<B::Index>
+    fn new_via_pred<F>(&mut self, predicate: F)
     where
         F: Fn(Field<B>) -> bool,
         B::Structure: NeighborhoodStructure<B>,
     {
-        self.iter()
+        for f in self
+            .iter()
             .flat_map(|f| f.neighbors().filter(|&f| predicate(f)))
-            .map(|f| f.index())
-            .collect()
+        {
+            self.buffer.push(f.index())
+        }
     }
 
-    fn extend_helper(&mut self, fields: FieldSearchResult<B::Index>) -> bool {
+    fn extend_helper(&mut self) -> bool {
         let mut success = false;
-        for i in fields.iter() {
-            if self.base_insert(i) {
+        for &i in self.buffer.iter() {
+            if !self.board.contains(i) {
+                panic!("Field with invalid index: {:?}", i);
+            }
+            if self.base_set.insert(i) {
                 success = true;
             }
         }
+        self.buffer.clear();
         success
     }
 
-    fn replace_helper(&mut self, fields: FieldSearchResult<B::Index>) {
-        self.base_set.clear();
-        for i in fields.iter() {
-            self.base_insert(i);
-        }
-    }
+    // fn replace_helper(&mut self, fields: FieldSearchResult<B::Index>) {
+    //     self.base_set.clear();
+    //     for i in fields.iter() {
+    //         self.base_insert(i);
+    //     }
+    // }
 }
 
 #[derive(Debug, Clone)]

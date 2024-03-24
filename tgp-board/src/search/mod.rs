@@ -48,15 +48,22 @@ impl<M: IndexMap<Item = ()>> From<M> for SetWrapper<M> {
 
 // ----- result type -----
 
+pub trait FieldSearchIter<I: BoardIdxType> {
+    fn into(self) -> impl Iterator<Item = I>;
+}
+
+impl<I: BoardIdxType, T: Into<I>, Iter> FieldSearchIter<I> for Iter
+where
+    Iter: Iterator<Item = T>,
+{
+    fn into(self) -> impl Iterator<Item = I> {
+        self.map(T::into)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FieldSearchResult<I: BoardIdxType> {
     data: Vec<I>,
-}
-
-impl<I: BoardIdxType> FieldSearchResult<I> {
-    fn iter(&self) -> impl Iterator<Item = I> + '_ {
-        self.data.iter().copied()
-    }
 }
 
 impl<I: BoardIdxType, T: Into<I>> FromIterator<T> for FieldSearchResult<I> {
