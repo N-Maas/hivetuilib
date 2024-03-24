@@ -4,8 +4,6 @@ mod searching_tree;
 pub use searching_set::*;
 pub use searching_tree::*;
 
-use std::{iter::FromIterator, vec::IntoIter};
-
 use crate::{BoardIdxType, IndexMap};
 
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
@@ -48,43 +46,15 @@ impl<M: IndexMap<Item = ()>> From<M> for SetWrapper<M> {
 
 // ----- result type -----
 
-pub trait FieldSearchIter<I: BoardIdxType> {
-    fn into(self) -> impl Iterator<Item = I>;
+pub trait FieldSearchIter<'a, I: BoardIdxType> {
+    fn into(self) -> impl Iterator<Item = I> + 'a;
 }
 
-impl<I: BoardIdxType, T: Into<I>, Iter> FieldSearchIter<I> for Iter
+impl<'a, I: BoardIdxType + 'a, T: Into<I> + 'a, Iter> FieldSearchIter<'a, I> for Iter
 where
-    Iter: Iterator<Item = T>,
+    Iter: Iterator<Item = T> + 'a,
 {
-    fn into(self) -> impl Iterator<Item = I> {
+    fn into(self) -> impl Iterator<Item = I> + 'a {
         self.map(T::into)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FieldSearchResult<I: BoardIdxType> {
-    data: Vec<I>,
-}
-
-impl<I: BoardIdxType, T: Into<I>> FromIterator<T> for FieldSearchResult<I> {
-    fn from_iter<Iter: IntoIterator<Item = T>>(iter: Iter) -> Self {
-        Self {
-            data: iter.into_iter().map(|val| val.into()).collect(),
-        }
-    }
-}
-
-impl<I: BoardIdxType, T: Into<I>> From<Vec<T>> for FieldSearchResult<I> {
-    fn from(vec: Vec<T>) -> Self {
-        Self::from_iter(vec.into_iter())
-    }
-}
-
-impl<I: BoardIdxType> IntoIterator for FieldSearchResult<I> {
-    type Item = I;
-    type IntoIter = IntoIter<I>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.data.into_iter()
     }
 }

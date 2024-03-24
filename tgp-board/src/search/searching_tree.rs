@@ -2,15 +2,16 @@ use std::{mem, slice::Iter};
 
 use crate::{structures::NeighborhoodStructure, Board, BoardToMap, Field, IndexMap};
 
-use super::{FieldSearchResult, SearchingSet, SetWrapper};
+use super::{FieldSearchIter, SearchingSet, SetWrapper};
 
 #[derive(Debug, Eq)]
 pub struct SearchingTree<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> {
     base_set: SetWrapper<M>,
-    // (parent, field)
+    /// (parent, field)
     tree: Vec<(usize, B::Index)>,
-    // (index in tree, length)
+    /// (index in tree, length)
     open_paths: Vec<(usize, usize)>,
+    path_buffer: Vec<(usize, usize)>,
     board: &'a B,
 }
 
@@ -35,6 +36,7 @@ where
             base_set: self.base_set.clone(),
             tree: self.tree.clone(),
             open_paths: self.open_paths.clone(),
+            path_buffer: Vec::new(),
             board: self.board,
         }
     }
@@ -49,6 +51,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingTree<'
             base_set: board.get_index_map().into(),
             tree: Vec::new(),
             open_paths: Vec::new(),
+            path_buffer: Vec::new(),
             board,
         }
     }
@@ -87,33 +90,34 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingTree<'
         self.open_paths.push((parent, 1));
     }
 
-    // TODO: a bit of code duplication here
-    pub fn extend_with<F>(&mut self, mut map_fields: F) -> bool
-    where
-        F: FnMut(&Self, Path<M, B>) -> FieldSearchResult<B::Index>,
-    {
-        let old_paths = mem::replace(&mut self.open_paths, Vec::new());
-        let mut success = false;
-        for (tree_index, length) in old_paths {
-            let path = Path::new(tree_index, length, self);
-            let old_idx = path.endpoint().index();
-            let new_indices = map_fields(self, path);
+    // TODO
+    // pub fn extend_with<F>(&mut self, mut map_fields: F) -> bool
+    // where
+    //     F: FnMut(&Self, Path<M, B>) -> FieldSearchResult<B::Index>,
+    // {
+    //     let old_paths = mem::replace(&mut self.open_paths, Vec::new());
+    //     let mut success = false;
+    //     for (tree_index, length) in old_paths {
+    //         let path = Path::new(tree_index, length, self);
+    //         let old_idx = path.endpoint().index();
+    //         let new_indices = map_fields(self, path);
 
-            for i in new_indices {
-                success = true;
-                if i == old_idx {
-                    self.insert_new_endpoint(i, self.tree[tree_index].0, length);
-                } else {
-                    self.insert_new_endpoint(i, tree_index, length + 1);
-                }
-            }
-        }
-        success
-    }
+    //         for i in new_indices {
+    //             success = true;
+    //             if i == old_idx {
+    //                 self.insert_new_endpoint(i, self.tree[tree_index].0, length);
+    //             } else {
+    //                 self.insert_new_endpoint(i, tree_index, length + 1);
+    //             }
+    //         }
+    //     }
+    //     success
+    // }
 
-    pub fn extend<F>(&mut self, map_fields: F, mode: SearchMode) -> bool
+    pub fn extend<F, Iter>(&mut self, map_fields: F, mode: SearchMode) -> bool
     where
-        F: FnMut(Field<B>) -> FieldSearchResult<B::Index>,
+        F: FnMut(Field<'a, B>) -> Iter,
+        Iter: FieldSearchIter<'a, B::Index>,
     {
         match mode {
             SearchMode::NewFieldsOnly => {
@@ -124,21 +128,21 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingTree<'
         }
     }
 
-    pub fn grow<F>(&mut self, mut predicate: F, mode: SearchMode) -> bool
-    where
-        F: FnMut(Field<B>) -> bool,
-        B::Structure: NeighborhoodStructure<B>,
-    {
-        self.extend(
-            |f| {
-                f.neighbors()
-                    .filter(|&n| predicate(n))
-                    .map(|n| n.index())
-                    .collect()
-            },
-            mode,
-        )
-    }
+    // pub fn grow<F>(&mut self, mut predicate: F, mode: SearchMode) -> bool
+    // where
+    //     F: FnMut(Field<B>) -> bool,
+    //     B::Structure: NeighborhoodStructure<B>,
+    // {
+    //     self.extend(
+    //         |f| {
+    //             f.neighbors()
+    //                 .filter(|&n| predicate(n))
+    //                 .map(|n| n.index())
+    //                 .collect()
+    //         },
+    //         mode,
+    //     )
+    // }
 
     pub fn into_set(self) -> SearchingSet<'a, M, B> {
         SearchingSet::from_map(self.base_set.into_map(), self.board)
@@ -155,19 +159,22 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingTree<'
         set
     }
 
-    fn extend_by_overlap<F, G>(&mut self, mut map_fields: F, is_overlap: G) -> bool
+    fn extend_by_overlap<F, Iter, G>(&mut self, mut map_fields: F, is_overlap: G) -> bool
     where
-        F: FnMut(Field<B>) -> FieldSearchResult<B::Index>,
+        F: FnMut(Field<'a, B>) -> Iter,
+        Iter: FieldSearchIter<'a, B::Index>,
         G: Fn(B::Index, &Self, Path<M, B>) -> bool,
     {
-        let old_paths = mem::replace(&mut self.open_paths, Vec::new());
+        let old_paths = mem::take(&mut self.open_paths);
+        // reuse the buffered allocation
+        self.path_buffer.clear();
+        mem::swap(&mut self.open_paths, &mut self.path_buffer); // --> path_buffer is now a new vec
         let mut success = false;
-        for (tree_index, length) in old_paths {
+        for &(tree_index, length) in old_paths.iter() {
             let field = Path::new(tree_index, 1, self).endpoint();
             let old_idx = field.index();
-            let new_indices = map_fields(field);
 
-            for i in new_indices {
+            for i in map_fields(field).into() {
                 if !is_overlap(i, self, Path::new(tree_index, length, self)) {
                     success = true;
                     if i == old_idx {
@@ -178,6 +185,8 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingTree<'
                 }
             }
         }
+        // again, we want to reuse the allocation
+        self.path_buffer = old_paths;
         success
     }
 
@@ -445,8 +454,8 @@ mod test {
         let board = TestBoard::with_default(3, WrappedOffsetStructure::new());
         let mut tree = SearchingTree::<<TestBoard as BoardToMap<()>>::Map, TestBoard>::new(&board);
         tree.insert_root(Index1D::from(1));
-        tree.extend(|f| f.neighbors().collect(), SearchMode::NoCycles);
-        tree.extend(|f| f.neighbors().collect(), SearchMode::NoCycles);
+        tree.extend(|f| f.neighbors(), SearchMode::NoCycles);
+        tree.extend(|f| f.neighbors(), SearchMode::NoCycles);
         let paths = tree.iter_paths().collect::<Vec<_>>();
         assert_eq!(paths.len(), 2);
         let expected = vec![Index1D::from(0), Index1D::from(2)];

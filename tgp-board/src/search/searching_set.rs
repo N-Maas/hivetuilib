@@ -108,8 +108,8 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
     /// Returns true, if at least one field was added.
     pub fn extend<F, Iter>(&mut self, map_fields: F) -> bool
     where
-        F: FnMut(Field<B>) -> Iter,
-        Iter: FieldSearchIter<B::Index>,
+        F: FnMut(Field<'a, B>) -> Iter,
+        Iter: FieldSearchIter<'a, B::Index>,
     {
         self.new_via_map(map_fields);
         self.extend_helper()
@@ -120,15 +120,15 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
     /// Note: The closure must not use interior mutability.
     pub fn extend_repeated<F, Iter>(&mut self, map_fields: F) -> bool
     where
-        F: Fn(Field<B>) -> Iter,
-        Iter: FieldSearchIter<B::Index>,
+        F: Fn(Field<'a, B>) -> Iter,
+        Iter: FieldSearchIter<'a, B::Index>,
     {
-        self.extend_repeated_impl(|f, buffer| buffer.extend(map_fields(f).into()))
+        self.extend_repeated_impl(move |f, buffer| buffer.extend(map_fields(f).into()))
     }
 
     fn extend_repeated_impl<F>(&mut self, map_fields: F) -> bool
     where
-        F: Fn(Field<B>, &mut Vec<B::Index>),
+        F: Fn(Field<'a, B>, &mut Vec<B::Index>),
     {
         let mut success = false;
         let mut queued = Vec::new();
@@ -205,8 +205,8 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
 
     pub fn replace<F, Iter>(&mut self, map_fields: F)
     where
-        F: FnMut(Field<B>) -> Iter,
-        Iter: FieldSearchIter<B::Index>,
+        F: FnMut(Field<'a, B>) -> Iter,
+        Iter: FieldSearchIter<'a, B::Index>,
     {
         self.new_via_map(map_fields);
         self.base_set.clear();
@@ -232,8 +232,8 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> SearchingSet<'a
 
     fn new_via_map<F, Iter>(&mut self, mut map_fields: F)
     where
-        F: FnMut(Field<B>) -> Iter,
-        Iter: FieldSearchIter<B::Index>,
+        F: FnMut(Field<'a, B>) -> Iter,
+        Iter: FieldSearchIter<'a, B::Index>,
     {
         for index in self.iter().flat_map(|f| map_fields(f).into()) {
             self.buffer.push(index)
