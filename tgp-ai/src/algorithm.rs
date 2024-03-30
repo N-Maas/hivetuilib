@@ -152,6 +152,10 @@ where
         }
     }
 
+    pub fn rate_and_map(&self) -> &R {
+        &self.rate_and_map
+    }
+
     pub fn apply<L>(&self, engine: &mut Engine<T, L>)
     where
         T: Clone,
