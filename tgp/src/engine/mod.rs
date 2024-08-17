@@ -28,7 +28,7 @@ pub enum CloneError {
 pub trait EventListener<T: GameData> {
     fn effect_applied(&mut self, effect: Box<T::EffectType>);
 
-    fn option_selected(&mut self, index: usize);
+    fn option_selected(&mut self, index: usize, player: usize);
 
     fn retracted_by_n(&mut self, n: usize);
 }
@@ -39,7 +39,7 @@ pub struct NotListening {}
 impl<T: GameData> EventListener<T> for NotListening {
     fn effect_applied(&mut self, _effect: Box<T::EffectType>) {}
 
-    fn option_selected(&mut self, _index: usize) {}
+    fn option_selected(&mut self, _index: usize, _player: usize) {}
 
     fn retracted_by_n(&mut self, _n: usize) {}
 }
@@ -261,8 +261,9 @@ impl<T: GameData, L: EventListener<T>> PEffectState for Engine<T, L> {
 
 impl<T: GameData, L: EventListener<T>> PDecisionState for Engine<T, L> {
     fn select_option(&mut self, index: usize) {
+        let player = self.decision().player();
         self.select_and_apply_option(index);
-        self.listener.option_selected(index);
+        self.listener.option_selected(index, player);
     }
 
     fn option_count(&self) -> usize {

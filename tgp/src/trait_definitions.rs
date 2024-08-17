@@ -37,7 +37,7 @@ impl<T: GameData> Debug for Outcome<T> {
 /// `T`: GameData
 /// `C`: Context
 pub trait Decision<T: GameData> {
-    // panics at wrong index
+    /// panics at wrong index
     fn select_option(&self, data: &T, index: usize) -> Outcome<T>;
 
     fn option_count(&self) -> usize;
@@ -46,6 +46,14 @@ pub trait Decision<T: GameData> {
 
     // seems like the best/most simple we can do in absence of GATs
     fn context(&self, data: &T) -> T::Context;
+}
+
+/// A context that where a specific element is provided for each
+/// option of the associated decision.
+pub trait IndexableContext {
+    type ContextElement;
+
+    fn select(&self, index: usize) -> Self::ContextElement;
 }
 
 /// Interface between the data and the GameEngine.
