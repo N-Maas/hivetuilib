@@ -1,6 +1,6 @@
 use std::{mem, slice::Iter};
 
-use crate::{structures::NeighborhoodStructure, Board, BoardToMap, Field, IndexMap};
+use crate::{Board, BoardToMap, Field, IndexMap};
 
 use super::{FieldSearchIter, SearchingSet, SetWrapper};
 
