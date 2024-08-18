@@ -4,6 +4,7 @@ pub mod io;
 pub mod logging;
 
 pub use concrete_engine::*;
+use io::SerializedLog;
 
 use std::{
     fmt::{self, Debug},
@@ -315,5 +316,13 @@ where
         } else {
             false
         }
+    }
+
+    pub fn log(&self) -> &EventLog<T> {
+        &self.listener
+    }
+
+    pub fn serialized_log(&self) -> SerializedLog {
+        self.listener.serialized()
     }
 }

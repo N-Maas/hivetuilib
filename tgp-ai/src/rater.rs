@@ -1,7 +1,7 @@
 use std::{cmp::Ord, convert::TryFrom, slice, usize};
 
 use tgp::{
-    engine::{Engine, EventListener, GameEngine, GameState, PendingDecision},
+    engine::{Engine, EventListener, GameState, PendingDecision},
     GameData,
 };
 

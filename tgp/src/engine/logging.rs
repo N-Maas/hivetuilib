@@ -2,7 +2,7 @@ use std::fmt::{self, Debug};
 
 use crate::{GameData, RevEffect};
 
-use super::EventListener;
+use super::{io::SerializedLog, EventListener};
 
 #[derive(Clone)]
 pub enum Event<T: GameData> {
@@ -79,19 +79,15 @@ impl<T: GameData> EventLog<T> {
         })
     }
 
-    pub(crate) fn iter_logged_and_redo_decisions(
-        &self,
-    ) -> (
-        impl Iterator<Item = (usize, usize)> + '_,
-        impl Iterator<Item = (usize, usize)> + '_,
-    ) {
-        (
-            self.log.iter().filter_map(|event| match event {
-                &Event::Decision(index, player) => Some((index, player)),
-                Event::Effect(_) => None,
-            }),
-            self.redo_stack.iter().copied(),
-        )
+    pub fn serialized(&self) -> SerializedLog {
+        let log_it = self.log.iter().filter_map(|event| match event {
+            Event::Effect(_) => None,
+            &Event::Decision(index, player) => Some((index, player)),
+        });
+        SerializedLog {
+            log: log_it.collect(),
+            redo_stack: self.redo_stack.clone(),
+        }
     }
 }
 
@@ -130,10 +126,7 @@ where
     }
 }
 
-impl<T: GameData> EventListener<T> for EventLog<T>
-where
-    T::EffectType: RevEffect<T>,
-{
+impl<T: GameData> EventListener<T> for EventLog<T> {
     fn effect_applied(&mut self, effect: Box<T::EffectType>) {
         self.log.push(Event::Effect(effect));
         self.redo_stack.clear();

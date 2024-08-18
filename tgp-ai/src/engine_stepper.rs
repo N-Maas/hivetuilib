@@ -1,7 +1,7 @@
 use std::fmt::{self, Debug};
 
 use tgp::{
-    engine::{logging::EventLog, Engine, GameEngine, GameState},
+    engine::{logging::EventLog, Engine, GameState},
     GameData, RevEffect,
 };
 

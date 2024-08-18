@@ -1,5 +1,3 @@
-use super::logging::EventLog;
-use crate::GameData;
 use std::{
     fs::File,
     io::{self, BufWriter, Write},
@@ -9,12 +7,20 @@ use std::{
 const PLAYER_SEPARATOR: char = 'P';
 const CURRENT_STATE: char = 'C';
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SerializedLog {
+    pub log: Vec<(usize, usize)>,
+    pub redo_stack: Vec<(usize, usize)>,
+}
+
 /// Saves the game state to the given file. Initial game state can be provided as key-value pairs.
-pub fn save_game_to_file<H: AsRef<str>, I, T: GameData>(
+///
+/// Note: Atomicity of file acccess needs to be ensured by the application.
+pub fn save_game_to_file<H: AsRef<str>, I>(
     path: &Path,
     header: H,
     initial_state: I,
-    log: &EventLog<T>,
+    log: SerializedLog,
 ) -> Result<(), io::Error>
 where
     I: IntoIterator<Item = (String, String)>,
@@ -24,11 +30,11 @@ where
 }
 
 /// Saves the game state via the provided writer. Initial game state can be provided as key-value pairs.
-pub fn save_game<W: Write, H: AsRef<str>, I, T: GameData>(
+pub fn save_game<W: Write, H: AsRef<str>, I>(
     mut writer: W,
     header: H,
     initial_state: I,
-    log: &EventLog<T>,
+    log: SerializedLog,
 ) -> Result<(), io::Error>
 where
     I: IntoIterator<Item = (String, String)>,
@@ -44,12 +50,11 @@ where
         })
         .collect::<Vec<_>>();
     writeln!(writer, "{}", key_val_pairs.join(" "))?;
-    let (logged, redo) = log.iter_logged_and_redo_decisions();
-    for (index, player) in logged {
+    for (index, player) in log.log.into_iter() {
         writeln!(writer, "{index}{PLAYER_SEPARATOR}{player}")?;
     }
     writeln!(writer, "{CURRENT_STATE}")?;
-    for (index, player) in redo {
+    for (index, player) in log.redo_stack.into_iter() {
         writeln!(writer, "{index}{PLAYER_SEPARATOR}{player}")?;
     }
     Ok(())

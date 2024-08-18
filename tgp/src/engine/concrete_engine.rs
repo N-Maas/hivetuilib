@@ -5,17 +5,6 @@ use super::{
     PEffectState, INTERNAL_ERROR,
 };
 
-// TODO: trait unnecessary
-/// Concrete engine trait which provides context for each decision.
-pub trait GameEngine {
-    type Data: GameData;
-    type Listener: EventListener<Self::Data>;
-
-    fn pull(&mut self) -> GameState<'_, Self::Data, Self::Listener>;
-
-    fn data(&self) -> &Self::Data;
-}
-
 #[derive(Debug)]
 pub enum GameState<'a, T: GameData, L: EventListener<T> = NotListening> {
     PendingEffect(PendingEffect<'a, T, L>),
@@ -23,11 +12,8 @@ pub enum GameState<'a, T: GameData, L: EventListener<T> = NotListening> {
     Finished(Finished<'a, T, L>),
 }
 
-impl<T: GameData, L: EventListener<T>> GameEngine for Engine<T, L> {
-    type Data = T;
-    type Listener = L;
-
-    fn pull(&mut self) -> GameState<'_, Self::Data, L> {
+impl<T: GameData, L: EventListener<T>> Engine<T, L> {
+    pub fn pull(&mut self) -> GameState<'_, T, L> {
         match &self.state {
             InternalState::PEffect(_) => GameState::PendingEffect(PendingEffect { engine: self }),
             InternalState::PDecision(_, _) => {
@@ -42,7 +28,7 @@ impl<T: GameData, L: EventListener<T>> GameEngine for Engine<T, L> {
         }
     }
 
-    fn data(&self) -> &T {
+    pub fn data(&self) -> &T {
         &self.data
     }
 }

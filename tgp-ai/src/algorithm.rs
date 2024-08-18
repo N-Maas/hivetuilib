@@ -4,7 +4,7 @@ use std::{
 };
 
 use tgp::{
-    engine::{logging::EventLog, CloneError, Engine, EventListener, GameEngine},
+    engine::{logging::EventLog, CloneError, Engine, EventListener},
     GameData, RevEffect,
 };
 
@@ -585,7 +585,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use tgp::engine::{Engine, GameEngine, GameState};
+    use tgp::engine::{Engine, GameState};
 
     use crate::{
         engine_stepper::EngineStepper,
