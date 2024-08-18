@@ -86,12 +86,12 @@ where
 
 impl<T> PlainDecision<T>
 where
-    T: GameData<EffectType = dyn Effect<T>> + 'static,
+    T: GameData<EffectType = dyn Effect<T>>,
     T::Context: Clone,
 {
     pub fn add_effect<A>(&mut self, apply: A) -> &mut Self
     where
-        A: Fn(&mut T) -> Option<Box<dyn Effect<T>>> + Clone + 'static,
+        A: Fn(&mut T) -> Option<Box<dyn Effect<T>>> + Clone + Send + 'static,
     {
         self.add_option(Box::new(move |_| {
             Outcome::Effect(new_effect(apply.clone()))
@@ -101,13 +101,13 @@ where
 
 impl<T> PlainDecision<T>
 where
-    T: GameData<EffectType = dyn RevEffect<T>> + 'static,
+    T: GameData<EffectType = dyn RevEffect<T>>,
     T::Context: Clone,
 {
     pub fn add_rev_effect<A, U>(&mut self, apply: A, undo: U) -> &mut Self
     where
-        A: Fn(&mut T) -> Option<Box<dyn RevEffect<T>>> + Clone + 'static,
-        U: Fn(&mut T) + Clone + 'static,
+        A: Fn(&mut T) -> Option<Box<dyn RevEffect<T>>> + Clone + Send + 'static,
+        U: Fn(&mut T) + Clone + Send + 'static,
     {
         self.add_option(Box::new(move |_| {
             Outcome::Effect(new_rev_effect(apply.clone(), undo.clone()))

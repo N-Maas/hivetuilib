@@ -25,9 +25,9 @@ pub struct MapToEffect<F> {
 
 impl<F, A, T, C: Clone, I: Clone> MapToOutcome<T, C, I> for MapToEffect<F>
 where
-    T: GameData<EffectType = dyn Effect<T>> + 'static,
+    T: GameData<EffectType = dyn Effect<T>>,
     F: Fn(&I, &C) -> A,
-    A: Fn(&mut T) -> Option<Box<dyn Effect<T>>> + 'static,
+    A: Fn(&mut T) -> Option<Box<dyn Effect<T>>> + Send + 'static,
 {
     fn apply_mapping(&self, _data: &T, inner: &I, context: &C) -> Outcome<T> {
         Outcome::Effect(new_effect((self.mapping)(inner, context)))
@@ -41,10 +41,10 @@ pub struct MapToRevEffect<F> {
 
 impl<F, A, U, T, C: Clone, I: Clone> MapToOutcome<T, C, I> for MapToRevEffect<F>
 where
-    T: GameData<EffectType = dyn RevEffect<T>> + 'static,
+    T: GameData<EffectType = dyn RevEffect<T>>,
     F: Fn(&I, &C) -> (A, U),
-    A: Fn(&mut T) -> Option<Box<dyn RevEffect<T>>> + 'static,
-    U: Fn(&mut T) + 'static,
+    A: Fn(&mut T) -> Option<Box<dyn RevEffect<T>>> + Send + 'static,
+    U: Fn(&mut T) + Send + 'static,
 {
     fn apply_mapping(&self, _data: &T, inner: &I, context: &C) -> Outcome<T> {
         let (apply, undo) = (self.mapping)(inner, context);
@@ -123,7 +123,7 @@ where
 
 // ----- builder pattern -----
 #[derive(Debug, Clone)]
-pub struct MappedDecision<T: GameData + 'static, C: Clone + 'static, I: Clone + 'static = ()>
+pub struct MappedDecision<T: GameData, C: Clone + 'static, I: Clone + 'static = ()>
 where
     T::Context: From<VecContext<C, I>>,
 {
@@ -132,7 +132,7 @@ where
     _t: PhantomData<T>,
 }
 
-impl<T: GameData + 'static, C: Clone + 'static> MappedDecision<T, C, ()>
+impl<T: GameData, C: Clone + 'static> MappedDecision<T, C, ()>
 where
     T::Context: From<VecContext<C>>,
 {
@@ -141,7 +141,7 @@ where
     }
 }
 
-impl<T: GameData + 'static, C: Clone + 'static, I: Clone + 'static> MappedDecision<T, C, I>
+impl<T: GameData, C: Clone + 'static, I: Clone + 'static> MappedDecision<T, C, I>
 where
     T::Context: From<VecContext<C, I>>,
 {
@@ -203,13 +203,13 @@ where
 
 impl<T, C: Clone + 'static, I: Clone + 'static> MappedDecision<T, C, I>
 where
-    T: GameData<EffectType = dyn Effect<T>> + 'static,
+    T: GameData<EffectType = dyn Effect<T>>,
     T::Context: From<VecContext<C, I>>,
 {
     pub fn spawn_by_effect<F, A>(self, mapping: F) -> Box<dyn Decision<T>>
     where
         F: Fn(&I, &C) -> A + 'static,
-        A: Fn(&mut T) -> Option<Box<dyn Effect<T>>> + 'static,
+        A: Fn(&mut T) -> Option<Box<dyn Effect<T>>> + Send + 'static,
     {
         Box::new(MappedDecisionImpl::new(
             MapToEffect { mapping },
@@ -221,14 +221,14 @@ where
 
 impl<T, C: Clone + 'static, I: Clone + 'static> MappedDecision<T, C, I>
 where
-    T: GameData<EffectType = dyn RevEffect<T>> + 'static,
+    T: GameData<EffectType = dyn RevEffect<T>>,
     T::Context: From<VecContext<C, I>>,
 {
     pub fn spawn_by_rev_effect<F, A, U>(self, mapping: F) -> Box<dyn Decision<T>>
     where
         F: Fn(&I, &C) -> (A, U) + 'static,
-        A: Fn(&mut T) -> Option<Box<dyn RevEffect<T>>> + 'static,
-        U: Fn(&mut T) + 'static,
+        A: Fn(&mut T) -> Option<Box<dyn RevEffect<T>>> + Send + 'static,
+        U: Fn(&mut T) + Send + 'static,
     {
         Box::new(MappedDecisionImpl::new(
             MapToRevEffect { mapping },
