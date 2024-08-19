@@ -59,7 +59,7 @@ impl<'a, B: Board> PartialEq for Field<'a, B> {
 
 impl<'a, B: Board> Clone for Field<'a, B> {
     fn clone(&self) -> Self {
-        Field { ..*self }
+        *self
     }
 }
 

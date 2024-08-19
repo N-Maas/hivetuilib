@@ -105,7 +105,7 @@ where
 {
     fn select_option(&self, data: &T, index: usize) -> Outcome<T> {
         self.mapping
-            .apply_mapping(data, &self.context.inner(), &self.context[index])
+            .apply_mapping(data, self.context.inner(), &self.context[index])
     }
 
     fn option_count(&self) -> usize {
