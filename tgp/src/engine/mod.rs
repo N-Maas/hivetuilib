@@ -69,10 +69,7 @@ impl<T: GameData> Engine<T> {
     }
 }
 
-impl<T: GameData> Engine<T, EventLog<T>>
-where
-    T::EffectType: RevEffect<T>,
-{
+impl<T: GameData> Engine<T, EventLog<T>> {
     pub fn new_logging(num_players: usize, data: T) -> Self {
         Self::with_listener(num_players, data, EventLog::new())
     }
@@ -230,13 +227,17 @@ impl<T: GameData, L: EventListener<T>> Engine<T, L> {
     }
 
     fn decision(&self) -> &dyn Decision<T> {
+        self.get_decision().expect(INTERNAL_ERROR)
+    }
+
+    fn get_decision(&self) -> Option<&dyn Decision<T>> {
         match &self.state {
             InternalState::PDecision(bottom, stack) => match stack.last() {
-                Some(decision) => decision,
-                None => bottom,
+                Some(decision) => Some(decision),
+                None => Some(bottom),
             }
-            .as_ref(),
-            _ => panic!("{}", INTERNAL_ERROR),
+            .map(Box::as_ref),
+            _ => None,
         }
     }
 
@@ -297,11 +298,11 @@ impl<T: GameData, L: EventListener<T>> PDecisionState for Engine<T, L> {
     }
 }
 
-impl<T: GameData> Engine<T, EventLog<T>>
-where
-    T::EffectType: RevEffect<T>,
-{
-    pub fn undo_last_decision(&mut self) -> bool {
+impl<T: GameData> Engine<T, EventLog<T>> {
+    pub fn undo_last_decision(&mut self) -> bool
+    where
+        T::EffectType: RevEffect<T>,
+    {
         if self.listener.undo_last_decision(&mut self.data) {
             self.state = self.fetch_next_state();
             true
@@ -320,6 +321,10 @@ where
 
     pub fn log(&self) -> &EventLog<T> {
         &self.listener
+    }
+
+    pub fn log_mut(&mut self) -> &mut EventLog<T> {
+        &mut self.listener
     }
 
     pub fn serialized_log(&self) -> SerializedLog {

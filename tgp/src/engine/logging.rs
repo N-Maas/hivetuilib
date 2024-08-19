@@ -35,8 +35,8 @@ impl<T: GameData> Debug for Event<T> {
 // TODO: safe point you can reset to (via generational indizes)?
 // TODO: snapshots (requires clone) - lift RevEffect requirement?
 pub struct EventLog<T: GameData> {
-    log: Vec<Event<T>>,
-    redo_stack: Vec<(usize, usize)>,
+    pub(crate) log: Vec<Event<T>>,
+    pub(crate) redo_stack: Vec<(usize, usize)>,
 }
 
 impl<T: GameData> Debug for EventLog<T> {

@@ -114,13 +114,33 @@ impl<'a, T: GameData, L: EventListener<T>> PendingDecision<'a, T, L> {
             Err(self)
         }
     }
+
+    /// Returns true if this was the final subdecision of the decision chain (and thus effects were applied)
+    pub fn apply_option(self, index: usize) -> bool {
+        self.engine.select_option(index);
+
+        let result = match &mut self.engine.state {
+            InternalState::PEffect(_) => {
+                let mut effect = Some(self.engine.take_effect());
+                while let Some(next) = effect {
+                    effect = next.apply(&mut self.engine.data);
+                    self.engine.listener.effect_applied(next);
+                }
+                self.engine.state = self.engine.fetch_next_state();
+                true
+            }
+            InternalState::PDecision(_, _) => false,
+            InternalState::Finished | InternalState::Invalid => panic!("{}", INTERNAL_ERROR),
+        };
+        result
+    }
 }
 
-impl<T: GameData> PendingDecision<'_, T, EventLog<T>>
-where
-    T::EffectType: RevEffect<T>,
-{
-    pub fn undo_last_decision(&mut self) -> bool {
+impl<T: GameData> PendingDecision<'_, T, EventLog<T>> {
+    pub fn undo_last_decision(&mut self) -> bool
+    where
+        T::EffectType: RevEffect<T>,
+    {
         self.engine.undo_last_decision()
     }
 
