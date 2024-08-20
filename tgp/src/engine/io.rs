@@ -1,4 +1,5 @@
 use std::{
+    fmt::Display,
     fs::File,
     io::{self, BufRead, BufWriter, Write},
     path::Path,
@@ -119,6 +120,21 @@ impl From<io::Error> for LoadGameError {
 impl From<String> for LoadGameError {
     fn from(value: String) -> Self {
         LoadGameError::from_file(0, value)
+    }
+}
+
+impl Display for LoadGameError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LoadGameError::IO(e) => write!(f, "{e}"),
+            LoadGameError::InvalidFileContent { line, msg } => write!(f, "{msg} at line {line}"),
+            LoadGameError::InvalidDecisionIndex { decision_nr, index, max_index }
+                => write!(f, "provided index {index} for decision is invalid (expected at most {max_index}) at decision number {decision_nr}"),
+            LoadGameError::UnexpectedPlayer { decision_nr, player, expected_player }
+                => write!(f, "expected player {expected_player}, but got player {player} at decision number {decision_nr}"),
+            LoadGameError::GameAlreadyFinished { decision_nr }
+                => write!(f, "game is already finished at decision number {decision_nr}"),
+        }
     }
 }
 
