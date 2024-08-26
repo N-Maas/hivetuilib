@@ -140,6 +140,7 @@ where
     pub fn new(params: Params, rate_and_map: R) -> MinMaxAlgorithm<T, R> {
         Self::with_pruning(params, rate_and_map, |_| PruningKind::KeepAll)
     }
+
     pub fn with_pruning<P>(params: Params, rate_and_map: R, pruning_fn: P) -> MinMaxAlgorithm<T, R>
     where
         P: Fn(PruningInput) -> PruningKind + 'static,
@@ -319,16 +320,8 @@ where
             return Vec::new();
         }
 
-        let is_own_turn = stepper.player() == player;
-        let compare = move |l: i32, r: i32| {
-            if is_own_turn {
-                r.cmp(&l)
-            } else {
-                l.cmp(&r)
-            }
-        };
-
         // collect moves and calculate min-max ratings
+        let is_own_turn = stepper.player() == player;
         let moves = self.create_move_ratings(
             stepper,
             sliding.move_cut_difference(),
@@ -348,45 +341,18 @@ where
 
         // cut the moves to the defined limit
         if depth >= 2 * delay_depth {
-            moves.sort_unstable_by(|&(r1, _, _, _), &(r2, _, _, _)| compare(r1, r2));
-            let min = moves.first().unwrap().0;
-            moves.retain(|(rating, _, _, _)| {
-                RatingType::abs(*rating - min) <= sliding.branch_cut_difference()
-            });
-            if moves.len() > sliding.branch_cut_limit() {
-                // TODO: Clustering
-                moves.truncate(sliding.branch_cut_limit());
-            }
+            self.cut_moves(&mut moves, sliding, |&(r, _, _, _)| r, is_own_turn);
         }
 
         // resolve equivalency classes
-        moves
-            .into_iter()
-            .map(
-                |(mut rating, mut indizes, equivalent_moves, mut children)| {
-                    for m_idz in equivalent_moves
-                        .into_iter()
-                        .take(sliding.equivalency_class_limit())
-                    {
-                        stepper.forward_step(&m_idz);
-                        let (m_rating, m_children) = self.collect_and_cut(
-                            depth - 1,
-                            stepper,
-                            player,
-                            delay_depth,
-                            sliding.next(),
-                        );
-                        if compare(m_rating, rating) == Ordering::Less {
-                            rating = m_rating;
-                            indizes = m_idz;
-                            children = m_children;
-                        }
-                        stepper.backward_step();
-                    }
-                    (rating, indizes, children)
-                },
-            )
-            .collect()
+        self.resolve_equivalencies(
+            moves,
+            stepper,
+            sliding,
+            |x| x,
+            |stepper| self.collect_and_cut(depth - 1, stepper, player, delay_depth, sliding.next()),
+            is_own_turn,
+        )
     }
 
     fn collect_and_cut(
@@ -401,16 +367,8 @@ where
             return (self.final_rating(depth, stepper, player), Vec::new());
         }
 
-        let is_own_turn = stepper.player() == player;
-        let compare = move |l: i32, r: i32| {
-            if is_own_turn {
-                r.cmp(&l)
-            } else {
-                l.cmp(&r)
-            }
-        };
-
         // collect moves and calculate min-max ratings
+        let is_own_turn = stepper.player() == player;
         let mut moves = self.create_move_ratings(
             stepper,
             sliding.move_cut_difference(),
@@ -425,44 +383,33 @@ where
 
         // cut the moves to the defined limit
         if depth >= (2 * delay_depth - 1) {
-            moves.sort_unstable_by(|&(r1, _, _), &(r2, _, _)| compare(r1, r2));
-            let min = moves.first().unwrap().0;
-            moves.retain(|(rating, _, _)| {
-                RatingType::abs(*rating - min) <= sliding.branch_cut_difference()
-            });
-            if moves.len() > sliding.branch_cut_limit() {
-                // TODO: Clustering
-                moves.truncate(sliding.branch_cut_limit());
-            }
+            self.cut_moves(&mut moves, sliding, |&(r, _, _)| r, is_own_turn);
         }
 
         // resolve equivalency classes
-        let result = moves
+        let result = self
+            .resolve_equivalencies(
+                moves,
+                stepper,
+                sliding,
+                |(rating, index, equivalent_moves)| (rating, index, equivalent_moves, ()),
+                |stepper| {
+                    (
+                        self.min_max_rating(depth - 1, stepper, player, sliding.next()),
+                        (),
+                    )
+                },
+                is_own_turn,
+            )
             .into_iter()
-            .map(|(mut rating, mut index, equivalent_moves)| {
-                for m_idzs in equivalent_moves
-                    .into_iter()
-                    .take(sliding.equivalency_class_limit())
-                {
-                    stepper.forward_step(&m_idzs);
-                    let m_rating = self.min_max_rating(depth - 1, stepper, player, sliding.next());
-                    if compare(m_rating, rating) == Ordering::Less {
-                        rating = m_rating;
-                        index = m_idzs;
-                    }
-                    stepper.backward_step();
-                }
-                (rating, index)
-            })
+            .map(|(rating, idz, _)| (rating, idz))
             .collect::<Vec<_>>();
 
         // calculate result
         let min = result
             .iter()
-            .min_by(|&&(r1, _), &&(r2, _)| compare(r1, r2))
-            .unwrap()
-            .0;
-        (min, result)
+            .min_by(|&&(r1, _), &&(r2, _)| Self::compare(r1, r2, is_own_turn));
+        (min.unwrap().0, result)
     }
 
     fn min_max_rating(
@@ -509,6 +456,69 @@ where
             RatingType::try_from(depth + 1).unwrap() * val
         } else {
             val
+        }
+    }
+
+    fn cut_moves<E, F>(
+        &self,
+        moves: &mut Vec<E>,
+        sliding: Sliding,
+        rating_key_fn: F,
+        is_own_turn: bool,
+    ) where
+        F: Fn(&E) -> RatingType,
+    {
+        moves.sort_unstable_by(|l, r| {
+            Self::compare(rating_key_fn(l), rating_key_fn(r), is_own_turn)
+        });
+        let min = rating_key_fn(&moves.first().unwrap());
+        moves.retain(|entry| {
+            RatingType::abs(rating_key_fn(entry) - min) <= sliding.branch_cut_difference()
+        });
+        // TODO: Clustering
+        moves.truncate(sliding.branch_cut_limit());
+    }
+
+    fn resolve_equivalencies<E, O, FnR, FnC>(
+        &self,
+        moves: Vec<E>,
+        stepper: &mut EngineStepper<T>,
+        sliding: Sliding,
+        resolve_el: FnR,
+        recursive_call: FnC,
+        is_own_turn: bool,
+    ) -> Vec<(RatingType, Box<[IndexType]>, O)>
+    where
+        FnR: Fn(E) -> (RatingType, Box<[IndexType]>, Vec<Box<[IndexType]>>, O),
+        FnC: Fn(&mut EngineStepper<T>) -> (RatingType, O),
+    {
+        moves
+            .into_iter()
+            .map(|element| {
+                let (mut rating, mut indizes, equivalent_moves, mut other) = resolve_el(element);
+                for curr_idz in equivalent_moves
+                    .into_iter()
+                    .take(sliding.equivalency_class_limit())
+                {
+                    stepper.forward_step(&curr_idz);
+                    let (curr_rating, curr_other) = recursive_call(stepper);
+                    if Self::compare(curr_rating, rating, is_own_turn) == Ordering::Less {
+                        rating = curr_rating;
+                        indizes = curr_idz;
+                        other = curr_other;
+                    }
+                    stepper.backward_step();
+                }
+                (rating, indizes, other)
+            })
+            .collect()
+    }
+
+    fn compare(l: i32, r: i32, is_own_turn: bool) -> Ordering {
+        if is_own_turn {
+            r.cmp(&l)
+        } else {
+            l.cmp(&r)
         }
     }
 
