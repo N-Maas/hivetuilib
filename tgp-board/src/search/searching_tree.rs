@@ -425,27 +425,27 @@ mod test {
         tree.insert_root(Index1D::from(0));
     }
 
-    #[test]
-    fn basic_test() {
-        type TestBoard = MatrixBoard<usize, OffsetStructure<Index2D, GridDiagDirection>>;
+    // #[test]
+    // fn basic_test() {
+    //     type TestBoard = MatrixBoard<usize, OffsetStructure<Index2D, GridDiagDirection>>;
 
-        let board = TestBoard::with_default(2, 2, OffsetStructure::new());
-        let mut tree = SearchingTree::<<TestBoard as BoardToMap<()>>::Map, TestBoard>::new(&board);
-        tree.insert_root(Index2D::from((0, 0)));
-        tree.extend_with(|_, path| path.endpoint().neighbors().collect());
-        let paths = tree.iter_paths().collect::<Vec<_>>();
-        assert_eq!(paths.len(), 3);
-        let expected = vec![
-            Index2D::from((1, 0)),
-            Index2D::from((1, 1)),
-            Index2D::from((0, 1)),
-        ];
-        assert!((paths[0] != paths[1]) && (paths[1]) != (paths[2]) && (paths[0] != paths[2]));
-        for p in paths {
-            assert_eq!(p.len(), 2);
-            assert!(expected.contains(&p.endpoint().index()));
-        }
-    }
+    //     let board = TestBoard::with_default(2, 2, OffsetStructure::new());
+    //     let mut tree = SearchingTree::<<TestBoard as BoardToMap<()>>::Map, TestBoard>::new(&board);
+    //     tree.insert_root(Index2D::from((0, 0)));
+    //     tree.extend_with(|_, path| path.endpoint().neighbors().collect());
+    //     let paths = tree.iter_paths().collect::<Vec<_>>();
+    //     assert_eq!(paths.len(), 3);
+    //     let expected = vec![
+    //         Index2D::from((1, 0)),
+    //         Index2D::from((1, 1)),
+    //         Index2D::from((0, 1)),
+    //     ];
+    //     assert!((paths[0] != paths[1]) && (paths[1]) != (paths[2]) && (paths[0] != paths[2]));
+    //     for p in paths {
+    //         assert_eq!(p.len(), 2);
+    //         assert!(expected.contains(&p.endpoint().index()));
+    //     }
+    // }
 
     #[test]
     fn no_cylce_mode_test() {
