@@ -345,14 +345,21 @@ where
         }
 
         // resolve equivalency classes
-        self.resolve_equivalencies(
+        let mut moves = self.resolve_equivalencies(
             moves,
             stepper,
+            self.params.equivalency_penalty,
             sliding,
             |x| x,
             |stepper| self.collect_and_cut(depth - 1, stepper, player, delay_depth, sliding.next()),
             is_own_turn,
-        )
+        );
+
+        // moves might exceed the limit again due to resolved equivalency classes
+        if depth >= 2 * delay_depth && moves.len() > sliding.branch_cut_limit() {
+            self.cut_moves(&mut moves, sliding, |&(r, _, _)| r, is_own_turn);
+        }
+        moves
     }
 
     fn collect_and_cut(
@@ -377,7 +384,7 @@ where
         );
         for (rating, indizes, _) in moves.iter_mut() {
             stepper.forward_step(&indizes);
-            *rating = self.min_max_rating(depth - 1, stepper, player, sliding.next());
+            *rating = self.min_max(depth - 1, stepper, player, sliding.next());
             stepper.backward_step();
         }
 
@@ -387,32 +394,33 @@ where
         }
 
         // resolve equivalency classes
-        let result = self
+        let mut moves = self
             .resolve_equivalencies(
                 moves,
                 stepper,
+                self.params.equivalency_penalty,
                 sliding,
                 |(rating, index, equivalent_moves)| (rating, index, equivalent_moves, ()),
-                |stepper| {
-                    (
-                        self.min_max_rating(depth - 1, stepper, player, sliding.next()),
-                        (),
-                    )
-                },
+                |stepper| (self.min_max(depth - 1, stepper, player, sliding.next()), ()),
                 is_own_turn,
             )
             .into_iter()
             .map(|(rating, idz, _)| (rating, idz))
             .collect::<Vec<_>>();
 
-        // calculate result
-        let min = result
+        // moves might exceed the limit again due to resolved equivalency classes
+        if depth >= (2 * delay_depth - 1) && moves.len() > sliding.branch_cut_limit() {
+            self.cut_moves(&mut moves, sliding, |&(r, _)| r, is_own_turn);
+        }
+
+        // calculate rating of best move
+        let min = moves
             .iter()
             .min_by(|&&(r1, _), &&(r2, _)| Self::compare(r1, r2, is_own_turn));
-        (min.unwrap().0, result)
+        (min.unwrap().0, moves)
     }
 
-    fn min_max_rating(
+    fn min_max(
         &self,
         depth: usize,
         stepper: &mut EngineStepper<T>,
@@ -432,7 +440,7 @@ where
         );
         let ratings = moves.into_iter().map(|(_, indizes)| {
             stepper.forward_step(&indizes);
-            let result = self.min_max_rating(depth - 1, stepper, player, sliding.next());
+            let result = self.min_max(depth - 1, stepper, player, sliding.next());
             stepper.backward_step();
             result
         });
@@ -483,6 +491,7 @@ where
         &self,
         moves: Vec<E>,
         stepper: &mut EngineStepper<T>,
+        equiv_penalty: RatingType,
         sliding: Sliding,
         resolve_el: FnR,
         recursive_call: FnC,
@@ -492,26 +501,30 @@ where
         FnR: Fn(E) -> (RatingType, Box<[IndexType]>, Vec<Box<[IndexType]>>, O),
         FnC: Fn(&mut EngineStepper<T>) -> (RatingType, O),
     {
-        moves
-            .into_iter()
-            .map(|element| {
-                let (mut rating, mut indizes, equivalent_moves, mut other) = resolve_el(element);
-                for curr_idz in equivalent_moves
-                    .into_iter()
-                    .take(sliding.equivalency_class_limit())
-                {
-                    stepper.forward_step(&curr_idz);
-                    let (curr_rating, curr_other) = recursive_call(stepper);
-                    if Self::compare(curr_rating, rating, is_own_turn) == Ordering::Less {
-                        rating = curr_rating;
-                        indizes = curr_idz;
-                        other = curr_other;
-                    }
-                    stepper.backward_step();
-                }
-                (rating, indizes, other)
-            })
-            .collect()
+        let choices = sliding.equivalency_class_choices();
+        let mut buffer = Vec::new();
+        let mut result = Vec::new();
+        for element in moves {
+            buffer.clear();
+            let (rating, indizes, equivalent_moves, other) = resolve_el(element);
+            buffer.push((rating, indizes, other));
+            for curr_idz in equivalent_moves
+                .into_iter()
+                .take(sliding.equivalency_class_limit())
+            {
+                stepper.forward_step(&curr_idz);
+                let (curr_rating, curr_other) = recursive_call(stepper);
+                buffer.push((curr_rating, curr_idz, curr_other));
+                stepper.backward_step();
+            }
+
+            // keep only few of the equivalent moves and also add an additional penalty (only applies to first branch)
+            buffer.sort_unstable_by(|&(l, _, _), &(r, _, _)| Self::compare(l, r, is_own_turn));
+            for (i, (rating, indizes, other)) in buffer.drain(..).enumerate().take(choices) {
+                result.push((rating - i as RatingType * equiv_penalty, indizes, other))
+            }
+        }
+        result
     }
 
     fn compare(l: i32, r: i32, is_own_turn: bool) -> Ordering {
@@ -609,34 +622,31 @@ mod test {
 
     #[test]
     fn min_max_test() {
-        let sliding = SlidingParams::with_defaults(4, 2, 4, 4, 2, 2, 4);
-        let params = Params::new(4, sliding.clone());
+        let sliding = SlidingParams::with_defaults(4, 2, 4, 4, 2, 2, 4, 1);
+        let params = Params::new(4, sliding.clone(), 1);
         let alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         let data = ZeroOneGame::new(false, 6);
         let mut engine = Engine::new_logging(2, data);
         let mut stepper = EngineStepper::new(&mut engine);
 
-        assert_eq!(alg.min_max_rating(0, &mut stepper, 0, sliding.get(1..)), 0);
-        assert_eq!(alg.min_max_rating(0, &mut stepper, 1, sliding.get(1..)), 0);
-        assert_eq!(alg.min_max_rating(1, &mut stepper, 0, sliding.get(1..)), 1);
-        assert_eq!(alg.min_max_rating(1, &mut stepper, 1, sliding.get(1..)), -1);
-        assert_eq!(alg.min_max_rating(2, &mut stepper, 0, sliding.get(1..)), -1);
-        assert_eq!(alg.min_max_rating(2, &mut stepper, 1, sliding.get(1..)), 1);
-        assert_eq!(alg.min_max_rating(3, &mut stepper, 0, sliding.get(1..)), 0);
-        assert_eq!(alg.min_max_rating(3, &mut stepper, 1, sliding.get(1..)), 0);
-        assert_eq!(alg.min_max_rating(4, &mut stepper, 0, sliding.get(1..)), -4);
-        assert_eq!(alg.min_max_rating(4, &mut stepper, 1, sliding.get(1..)), 4);
-        assert_eq!(
-            alg.min_max_rating(6, &mut stepper, 0, sliding.get(1..)),
-            -12
-        );
-        assert_eq!(alg.min_max_rating(6, &mut stepper, 1, sliding.get(1..)), 12);
+        assert_eq!(alg.min_max(0, &mut stepper, 0, sliding.get(1..)), 0);
+        assert_eq!(alg.min_max(0, &mut stepper, 1, sliding.get(1..)), 0);
+        assert_eq!(alg.min_max(1, &mut stepper, 0, sliding.get(1..)), 1);
+        assert_eq!(alg.min_max(1, &mut stepper, 1, sliding.get(1..)), -1);
+        assert_eq!(alg.min_max(2, &mut stepper, 0, sliding.get(1..)), -1);
+        assert_eq!(alg.min_max(2, &mut stepper, 1, sliding.get(1..)), 1);
+        assert_eq!(alg.min_max(3, &mut stepper, 0, sliding.get(1..)), 0);
+        assert_eq!(alg.min_max(3, &mut stepper, 1, sliding.get(1..)), 0);
+        assert_eq!(alg.min_max(4, &mut stepper, 0, sliding.get(1..)), -4);
+        assert_eq!(alg.min_max(4, &mut stepper, 1, sliding.get(1..)), 4);
+        assert_eq!(alg.min_max(6, &mut stepper, 0, sliding.get(1..)), -12);
+        assert_eq!(alg.min_max(6, &mut stepper, 1, sliding.get(1..)), 12);
     }
 
     #[test]
     fn collect_and_cut_test() {
-        let sliding = SlidingParams::with_defaults(4, 2, 4, 4, 2, 2, 4);
-        let params = Params::new(4, sliding.clone());
+        let sliding = SlidingParams::with_defaults(4, 2, 4, 4, 2, 2, 4, 1);
+        let params = Params::new(4, sliding.clone(), 1);
         let alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         let data = ZeroOneGame::new(false, 6);
         let mut engine = Engine::new_logging(2, data);
@@ -678,8 +688,8 @@ mod test {
 
     #[test]
     fn collect_recursive_test() {
-        let sliding = SlidingParams::with_defaults(4, 2, 4, 4, 2, 2, 4);
-        let params = Params::new(4, sliding.clone());
+        let sliding = SlidingParams::with_defaults(4, 2, 4, 4, 2, 2, 4, 1);
+        let params = Params::new(4, sliding.clone(), 1);
         let alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         let data = ZeroOneGame::new(false, 6);
         let mut engine = Engine::new_logging(2, data);
@@ -781,8 +791,8 @@ mod test {
 
     #[test]
     fn run_test() {
-        let sliding = SlidingParams::with_defaults(1, 2, 4, 4, 2, 2, 4);
-        let params = Params::new(1, sliding.clone());
+        let sliding = SlidingParams::with_defaults(1, 2, 4, 4, 2, 2, 4, 1);
+        let params = Params::new(1, sliding.clone(), 1);
         let mut alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         alg.params.first_cut_delay_depth = 1;
         let data = ZeroOneGame::new(true, 8);
@@ -792,8 +802,8 @@ mod test {
             Ok((1, Box::from([0, 0]), ZeroOneContext::ZeroAnd))
         );
 
-        let sliding = SlidingParams::with_defaults(2, 1, 4, 4, 4, 2, 4);
-        let params = Params::new(2, sliding.clone());
+        let sliding = SlidingParams::with_defaults(2, 1, 4, 4, 4, 2, 4, 1);
+        let params = Params::new(2, sliding.clone(), 1);
         let mut alg = MinMaxAlgorithm::new(params, RateAndMapZeroOne);
         alg.params.first_cut_delay_depth = 1;
         assert_eq!(

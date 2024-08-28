@@ -10,6 +10,7 @@ pub struct Params {
     pub depth: usize,
     pub first_cut_delay_depth: usize,
     pub first_move_added_delay_depth: usize,
+    pub equivalency_penalty: RatingType,
 
     pub sliding: SlidingParams,
     // TODO: scale limits for larger tree
@@ -27,11 +28,12 @@ impl Params {
             .integrity_check(self.depth, self.first_cut_delay_depth);
     }
 
-    pub fn new(depth: usize, sliding: SlidingParams) -> Self {
+    pub fn new(depth: usize, sliding: SlidingParams, equivalency_penalty: RatingType) -> Self {
         Self {
             depth,
             first_cut_delay_depth: usize::min(2, depth),
             first_move_added_delay_depth: 0,
+            equivalency_penalty,
             sliding,
         }
     }
@@ -78,6 +80,7 @@ pub struct SlidingParams {
     pub move_limit: Vec<usize>,
     pub move_cut_difference: Vec<RatingType>,
     pub equivalency_class_limit: Vec<usize>,
+    pub equivalency_class_choices: Vec<usize>,
 }
 
 impl SlidingParams {
@@ -87,6 +90,7 @@ impl SlidingParams {
         move_limit: Vec<usize>,
         move_cut_difference: Vec<RatingType>,
         equivalency_class_limit: Vec<usize>,
+        equivalency_class_choices: Vec<usize>,
     ) -> Self {
         Self {
             branch_cut_limit,
@@ -94,6 +98,7 @@ impl SlidingParams {
             move_limit,
             move_cut_difference,
             equivalency_class_limit,
+            equivalency_class_choices,
         }
     }
 
@@ -105,6 +110,7 @@ impl SlidingParams {
         branch_difference_probable: RatingType,
         move_difference_probable: RatingType,
         equivalency_class_limit: usize,
+        equivalency_class_choices: usize,
     ) -> Self {
         assert!(depth > 0);
         let reduced_depth = usize::max(2, 2 * (depth.saturating_sub(first_cut_delay_depth) + 1));
@@ -123,6 +129,9 @@ impl SlidingParams {
         let mut equivalency_class_limit_vec = Vec::new();
         equivalency_class_limit_vec.push(4 * equivalency_class_limit);
         equivalency_class_limit_vec.resize(reduced_depth, equivalency_class_limit);
+        let mut equivalency_class_choices_vec = Vec::new();
+        equivalency_class_choices_vec.push(2 * equivalency_class_choices);
+        equivalency_class_choices_vec.resize(reduced_depth, equivalency_class_choices);
 
         Self::new(
             branch_cut_limit_vec,
@@ -130,6 +139,7 @@ impl SlidingParams {
             move_limit_vec,
             move_cut_difference,
             equivalency_class_limit_vec,
+            equivalency_class_choices_vec,
         )
     }
 
@@ -149,6 +159,7 @@ impl SlidingParams {
             move_limit: &self.move_limit[range.clone()],
             move_cut_difference: &self.move_cut_difference[range.clone()],
             equivalency_class_limit: &self.equivalency_class_limit[range.clone()],
+            equivalency_class_choices: &self.equivalency_class_choices[range.clone()],
         }
     }
 }
@@ -160,6 +171,7 @@ pub(crate) struct Sliding<'a> {
     move_limit: &'a [usize],
     move_cut_difference: &'a [RatingType],
     equivalency_class_limit: &'a [usize],
+    equivalency_class_choices: &'a [usize],
 }
 
 impl<'a> Sliding<'a> {
@@ -183,6 +195,10 @@ impl<'a> Sliding<'a> {
         self.equivalency_class_limit[0]
     }
 
+    pub fn equivalency_class_choices(&self) -> usize {
+        self.equivalency_class_choices[0]
+    }
+
     pub fn next(&self) -> Self {
         let branch_cut_limit = if self.branch_cut_limit.is_empty() {
             &[]
@@ -199,12 +215,18 @@ impl<'a> Sliding<'a> {
         } else {
             &self.equivalency_class_limit[1..]
         };
+        let equivalency_class_choices = if self.equivalency_class_choices.is_empty() {
+            &[]
+        } else {
+            &self.equivalency_class_choices[1..]
+        };
         Self {
             branch_cut_limit,
             branch_cut_difference,
             move_limit: &self.move_limit[1..],
             move_cut_difference: &self.move_cut_difference[1..],
             equivalency_class_limit,
+            equivalency_class_choices,
         }
     }
 }
