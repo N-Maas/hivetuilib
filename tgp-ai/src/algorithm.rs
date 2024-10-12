@@ -1,7 +1,4 @@
-use std::{
-    cmp::Ordering, convert::TryFrom, fmt::Debug, fs::OpenOptions, marker::PhantomData,
-    ops::ControlFlow,
-};
+use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, marker::PhantomData, ops::ControlFlow};
 
 use tgp::{
     engine::{logging::EventLog, CloneError, Engine, EventListener},
@@ -521,7 +518,12 @@ where
             // keep only few of the equivalent moves and also add an additional penalty (only applies to first branch)
             buffer.sort_unstable_by(|&(l, _, _), &(r, _, _)| Self::compare(l, r, is_own_turn));
             for (i, (rating, indizes, other)) in buffer.drain(..).enumerate().take(choices) {
-                result.push((rating - i as RatingType * equiv_penalty, indizes, other))
+                let sign = if is_own_turn { -1 } else { 1 };
+                result.push((
+                    rating + sign * i as RatingType * equiv_penalty,
+                    indizes,
+                    other,
+                ))
             }
         }
         result

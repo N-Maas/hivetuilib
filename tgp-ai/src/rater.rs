@@ -78,7 +78,10 @@ impl Rater {
         let own_index = IndexType::try_from(own_index).unwrap();
 
         self.set_rating(dec_index, option_index, Rating::Value(value));
-        assert!(matches!(self.move_ratings[target], Rating::Value(_)),  "{INTERNAL_ERROR}");
+        assert!(
+            matches!(self.move_ratings[target], Rating::Value(_)),
+            "{INTERNAL_ERROR}"
+        );
         self.move_ratings[target] = Rating::Equivalency(own_index);
     }
 

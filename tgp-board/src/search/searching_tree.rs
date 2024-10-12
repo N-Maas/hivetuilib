@@ -399,11 +399,8 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Iterator
 #[cfg(test)]
 mod test {
     use crate::{
-        concrete_boards::{matrix_board::*, vec_board::*},
-        structures::{
-            directions::{BinaryDirection, GridDiagDirection},
-            OffsetStructure, WrappedOffsetStructure,
-        },
+        concrete_boards::vec_board::*,
+        structures::{directions::BinaryDirection, WrappedOffsetStructure},
         BoardToMap,
     };
 
