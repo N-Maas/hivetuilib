@@ -70,7 +70,7 @@ impl<T, S> BoardIndexable for VecBoard<T, S> {
     type Index = Index1D;
 
     #[inline(always)]
-    fn all_indices<'a>(&'a self) -> impl Iterator<Item = Index1D> + 'a {
+    fn all_indices(&self) -> impl Iterator<Item = Index1D> {
         (0..self.content.len()).map(Index1D::from)
     }
 }

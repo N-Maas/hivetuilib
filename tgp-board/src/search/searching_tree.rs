@@ -340,11 +340,7 @@ impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> PartialEq for P
 
 impl<'a, M: IndexMap<Item = ()>, B: Board<Index = M::IndexType>> Clone for Path<'a, '_, M, B> {
     fn clone(&self) -> Self {
-        Self {
-            tree_index: self.tree_index,
-            length: self.length,
-            searching_tree: self.searching_tree,
-        }
+        *self
     }
 }
 

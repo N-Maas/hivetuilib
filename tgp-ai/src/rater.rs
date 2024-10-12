@@ -1,4 +1,4 @@
-use std::{cmp::Ord, convert::TryFrom, slice, usize};
+use std::{cmp::Ord, convert::TryFrom, slice};
 
 use tgp::{
     engine::{Engine, EventListener, GameState, PendingDecision},
@@ -113,9 +113,7 @@ impl Rater {
             .map(|(val, path)| {
                 (
                     val,
-                    path.into_iter()
-                        .map(|&i| usize::try_from(i).unwrap())
-                        .collect(),
+                    path.iter().map(|&i| usize::try_from(i).unwrap()).collect(),
                 )
             })
             .collect()
@@ -351,7 +349,7 @@ fn for_each_decision_flat_impl<T: GameData, L: EventListener<T>, F, A>(
                     .retract();
             }
         }
-        DecisionType::BottomLevel => apply(&dec, &path, context),
+        DecisionType::BottomLevel => apply(&dec, path, context),
     }
 }
 

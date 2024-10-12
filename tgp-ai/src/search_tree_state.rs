@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, mem, ops::ControlFlow, usize};
+use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, mem, ops::ControlFlow};
 
 use tgp::{GameData, RevEffect};
 
@@ -211,7 +211,7 @@ impl SearchTreeState {
             .iter()
             .enumerate()
             .filter(|(j, _)| {
-                if retained.peek() == Some(&j) {
+                if retained.peek() == Some(j) {
                     retained.next();
                     true
                 } else {
@@ -274,7 +274,7 @@ impl SearchTreeState {
     }
 
     fn get_level(&self, index: usize) -> &[TreeEntry] {
-        &self.tree.get(index).expect(INTERNAL_ERROR)
+        self.tree.get(index).expect(INTERNAL_ERROR)
     }
 
     fn entry(&self, index: TreeIndex) -> &TreeEntry {

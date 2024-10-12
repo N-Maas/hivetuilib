@@ -12,6 +12,8 @@ use crate::{
     IndexType, Params, RatingType, Sliding, INTERNAL_ERROR,
 };
 
+type MoveRating<T> = (RatingType, Box<[usize]>, <T as GameData>::Context);
+
 pub trait RateAndMap<T: GameData> {
     fn apply_type_mapping(&self, context: &T::Context) -> DecisionType;
 
@@ -82,7 +84,7 @@ impl From<CloneError> for MinMaxError {
 pub fn add_context_to_ratings<T, L>(
     engine: &Engine<T, L>,
     ratings: Vec<(RatingType, Box<[usize]>)>,
-) -> Result<Vec<(RatingType, Box<[usize]>, T::Context)>, InvalidEngineState>
+) -> Result<Vec<MoveRating<T>>, InvalidEngineState>
 where
     T: GameData + Clone + Debug,
     L: EventListener<T>,
@@ -168,10 +170,7 @@ where
         }
     }
 
-    pub fn run<L>(
-        &self,
-        engine: &Engine<T, L>,
-    ) -> Result<(RatingType, Box<[usize]>, T::Context), InvalidEngineState>
+    pub fn run<L>(&self, engine: &Engine<T, L>) -> Result<MoveRating<T>, InvalidEngineState>
     where
         T: Clone,
         L: EventListener<T>,
@@ -184,13 +183,13 @@ where
         &self,
         engine: &Engine<T, L>,
         should_cancel: F,
-    ) -> Result<(RatingType, Box<[usize]>, T::Context), MinMaxError>
+    ) -> Result<MoveRating<T>, MinMaxError>
     where
         T: GameData + Clone,
         L: EventListener<T>,
         F: Fn() -> bool,
     {
-        let ratings = self.run_all_ratings_with_cancellation(&engine, should_cancel)?;
+        let ratings = self.run_all_ratings_with_cancellation(engine, should_cancel)?;
         let result = ratings
             .into_iter()
             .max_by_key(|&(r, _, _)| r)
@@ -203,7 +202,7 @@ where
     pub fn run_all_ratings<L>(
         &self,
         engine: &Engine<T, L>,
-    ) -> Result<Vec<(RatingType, Box<[usize]>, T::Context)>, InvalidEngineState>
+    ) -> Result<Vec<MoveRating<T>>, InvalidEngineState>
     where
         T: GameData + Clone,
         L: EventListener<T>,
@@ -216,7 +215,7 @@ where
         &self,
         engine: &Engine<T, L>,
         should_cancel: F,
-    ) -> Result<Vec<(RatingType, Box<[usize]>, T::Context)>, MinMaxError>
+    ) -> Result<Vec<MoveRating<T>>, MinMaxError>
     where
         T: GameData + Clone,
         L: EventListener<T>,
@@ -380,7 +379,7 @@ where
             Rater::cut_and_sort_with_equivalency,
         );
         for (rating, indizes, _) in moves.iter_mut() {
-            stepper.forward_step(&indizes);
+            stepper.forward_step(indizes);
             *rating = self.min_max(depth - 1, stepper, player, sliding.next());
             stepper.backward_step();
         }
@@ -476,7 +475,7 @@ where
         moves.sort_unstable_by(|l, r| {
             Self::compare(rating_key_fn(l), rating_key_fn(r), is_own_turn)
         });
-        let min = rating_key_fn(&moves.first().unwrap());
+        let min = rating_key_fn(moves.first().unwrap());
         moves.retain(|entry| {
             RatingType::abs(rating_key_fn(entry) - min) <= sliding.branch_cut_difference()
         });

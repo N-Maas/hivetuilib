@@ -119,7 +119,7 @@ impl<'a, T: GameData, L: EventListener<T>> PendingDecision<'a, T, L> {
     pub fn apply_option(self, index: usize) -> bool {
         self.engine.select_option(index);
 
-        let result = match &mut self.engine.state {
+        match &mut self.engine.state {
             InternalState::PEffect(_) => {
                 let mut effect = Some(self.engine.take_effect());
                 while let Some(next) = effect {
@@ -131,8 +131,7 @@ impl<'a, T: GameData, L: EventListener<T>> PendingDecision<'a, T, L> {
             }
             InternalState::PDecision(_, _) => false,
             InternalState::Finished | InternalState::Invalid => panic!("{}", INTERNAL_ERROR),
-        };
-        result
+        }
     }
 }
 

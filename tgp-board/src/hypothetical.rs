@@ -101,7 +101,7 @@ where
     type Index = B::Index;
 
     #[inline(always)]
-    fn all_indices<'a>(&'a self) -> impl Iterator<Item = Self::Index> + 'a {
+    fn all_indices(&self) -> impl Iterator<Item = Self::Index> {
         self.board.all_indices()
     }
 }

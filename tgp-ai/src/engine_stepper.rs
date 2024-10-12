@@ -86,7 +86,7 @@ where
     }
 
     pub fn engine(&mut self) -> &mut Engine<T, EventLog<T>> {
-        &mut self.engine
+        self.engine
     }
 
     pub fn data(&self) -> &T {

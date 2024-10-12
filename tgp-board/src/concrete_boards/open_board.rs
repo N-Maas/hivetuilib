@@ -184,7 +184,7 @@ impl<T, S> BoardIndexable for OpenBoard<T, S> {
 
     // TODO: this is wrong and not performant
     #[inline(always)]
-    fn all_indices<'a>(&'a self) -> impl Iterator<Item = OpenIndex> + 'a {
+    fn all_indices(&self) -> impl Iterator<Item = OpenIndex> {
         let (dx, dy) = self.offset;
         self.columns.iter().enumerate().flat_map(move |(x, col)| {
             col.iter().enumerate().filter_map(move |(y, field)| {

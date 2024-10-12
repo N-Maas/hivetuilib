@@ -112,7 +112,7 @@ where
 pub trait BoardIndexable {
     type Index: BoardIdxType;
 
-    fn all_indices<'a>(&'a self) -> impl Iterator<Item = Self::Index> + 'a;
+    fn all_indices(&self) -> impl Iterator<Item = Self::Index>;
 
     // fn enumerate_mut(&mut self) -> Vec<(I, &mut Self::Content)>;
 }
