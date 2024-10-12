@@ -12,6 +12,26 @@ use super::{GameState, LoggingEngine};
 const PLAYER_SEPARATOR: char = 'P';
 const CURRENT_STATE: &str = "C";
 
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum CompatibilityPolicy {
+    MajorLessEqual,
+    MajorEqual,
+    MinorLessEqual,
+    MinorEqual,
+}
+
+impl CompatibilityPolicy {
+    fn is_compatible(&self, game: [u32; 2], save: [u32; 2]) -> bool {
+        match self {
+            CompatibilityPolicy::MajorLessEqual => save[0] <= game[0],
+            CompatibilityPolicy::MajorEqual => save[0] == game[0],
+            CompatibilityPolicy::MinorLessEqual => save[0] == game[0] && save[1] <= game[1],
+            CompatibilityPolicy::MinorEqual => save == game,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SerializedLog {
     pub log: Vec<(usize, usize)>,
@@ -25,6 +45,7 @@ pub struct SerializedLog {
 pub fn save_game_to_file<H: AsRef<str>, I>(
     path: &Path,
     header: H,
+    version: [u32; 2],
     initial_state: I,
     num_players: usize,
     log: SerializedLog,
@@ -36,6 +57,7 @@ where
     save_game(
         BufWriter::new(file),
         header,
+        version,
         initial_state,
         num_players,
         log,
@@ -46,6 +68,7 @@ where
 pub fn save_game<W: Write, H: AsRef<str>, I>(
     mut writer: W,
     header: H,
+    version: [u32; 2],
     initial_state: I,
     num_players: usize,
     log: SerializedLog,
@@ -53,7 +76,7 @@ pub fn save_game<W: Write, H: AsRef<str>, I>(
 where
     I: IntoIterator<Item = (String, String)>,
 {
-    writeln!(writer, "{}", header.as_ref())?;
+    writeln!(writer, "{} v{}.{}", header.as_ref(), version[0], version[1])?;
     let key_val_pairs = initial_state
         .into_iter()
         .map(|(key, val)| {
@@ -83,6 +106,11 @@ pub enum LoadGameError {
     InvalidFileContent {
         line: usize,
         msg: String,
+    },
+    /// Version error
+    VersionMismatch {
+        game: [u32; 2],
+        save: [u32; 2],
     },
     /// Semantic error: index is not valid for decision
     InvalidDecisionIndex {
@@ -128,6 +156,8 @@ impl Display for LoadGameError {
         match self {
             LoadGameError::IO(e) => write!(f, "{e}"),
             LoadGameError::InvalidFileContent { line, msg } => write!(f, "{msg} at line {line}"),
+            LoadGameError::VersionMismatch { game, save }
+                => write!(f, "saved version (v{}.{}) is incompatible with game version (v{}.{})", save[0], save[1], game[0], game[1]),
             LoadGameError::InvalidDecisionIndex { decision_nr, index, max_index }
                 => write!(f, "provided index {index} for decision is invalid (expected at most {max_index}) at decision number {decision_nr}"),
             LoadGameError::UnexpectedPlayer { decision_nr, player, expected_player }
@@ -143,6 +173,8 @@ impl Display for LoadGameError {
 pub fn parse_saved_game<R: BufRead, H: AsRef<str>>(
     mut reader: R,
     expected_header: H,
+    version: [u32; 2],
+    compatibility_policy: CompatibilityPolicy,
 ) -> Result<(Vec<(String, String)>, usize, SerializedLog), LoadGameError> {
     let mut curr_line = 0;
     let mut line = String::new();
@@ -156,14 +188,33 @@ pub fn parse_saved_game<R: BufRead, H: AsRef<str>>(
         Ok(result)
     };
 
-    // read header
+    // read header and version
     next_line(&mut line, &mut curr_line)?;
     let expected = expected_header.as_ref();
-    if line != expected_header.as_ref() {
-        return Err(LoadGameError::from_file(
+    let header_err = || {
+        LoadGameError::from_file(
             curr_line,
-            format!("Invalid header: {line}, expected: {expected}"),
-        ));
+            format!("Invalid header: {line}, expected: {expected} vX.Y"),
+        )
+    };
+    let version_str = line.split(' ').last().ok_or_else(header_err)?;
+    let header_name = line.strip_suffix(version_str).unwrap().strip_suffix(' ');
+    let version_str = version_str.strip_prefix('v').ok_or_else(header_err)?;
+    let header_name = header_name.ok_or_else(header_err)?;
+    if header_name != expected_header.as_ref() {
+        return Err(header_err());
+    }
+    let save_version = version_str
+        .split('.')
+        .map(str::parse)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| header_err())?;
+    let save_version: [u32; 2] = save_version.try_into().map_err(|_| header_err())?;
+    if !compatibility_policy.is_compatible(version, save_version) {
+        return Err(LoadGameError::VersionMismatch {
+            game: version,
+            save: save_version,
+        });
     }
 
     // read initial state
@@ -291,11 +342,14 @@ pub fn restore_game_state_impl<'a, T: GameData>(
 pub fn load_game<T: GameData, R: BufRead, H: AsRef<str>, F>(
     reader: R,
     expected_header: H,
+    version: [u32; 2],
+    compatibility_policy: CompatibilityPolicy,
     parse_initial_state: F,
 ) -> Result<LoggingEngine<T>, LoadGameError>
 where
     F: Fn(&[(String, String)]) -> Result<T, String>,
 {
-    let (initial_state, num_players, log) = parse_saved_game(reader, expected_header)?;
+    let (initial_state, num_players, log) =
+        parse_saved_game(reader, expected_header, version, compatibility_policy)?;
     restore_game_state(num_players, || parse_initial_state(&initial_state), log)
 }
