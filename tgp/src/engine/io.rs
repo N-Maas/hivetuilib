@@ -39,6 +39,38 @@ pub struct SerializedLog {
     pub redo_stack: Vec<(usize, usize)>,
 }
 
+/// Serialized string of the given initial game state, provided as key-value pairs.
+pub fn serialize_initial_state<I>(initial_state: I) -> String
+where
+    I: IntoIterator<Item = (String, String)>,
+{
+    let key_val_pairs = initial_state
+        .into_iter()
+        .map(|(key, val)| {
+            // TODO: escaping of spaces / newlines
+            assert!(!key.contains(' ') && !key.contains('\n'));
+            assert!(!val.contains(' ') && !val.contains('\n'));
+            key + " " + &val
+        })
+        .collect::<Vec<_>>();
+    key_val_pairs.join(" ")
+}
+
+/// Serialized string of the given initial game state, provided as key-value pairs.
+pub fn deserialize_initial_state(input: &str) -> Result<Vec<(String, String)>, String> {
+    let mut key_val_pairs = Vec::new();
+    let mut it = input.split_ascii_whitespace().peekable();
+    loop {
+        match (it.next(), it.next()) {
+            (Some(key), Some(val)) => key_val_pairs.push((key.to_string(), val.to_string())),
+            (None, None) => break,
+            (_, None) => return Err("Uneven number of key-value entries".to_string()),
+            _ => unreachable!(),
+        }
+    }
+    Ok(key_val_pairs)
+}
+
 /// Saves the game state to the given file. Initial game state can be provided as key-value pairs.
 ///
 /// Note: Atomicity of file acccess needs to be ensured by the application.
@@ -77,16 +109,8 @@ where
     I: IntoIterator<Item = (String, String)>,
 {
     writeln!(writer, "{} v{}.{}", header.as_ref(), version[0], version[1])?;
-    let key_val_pairs = initial_state
-        .into_iter()
-        .map(|(key, val)| {
-            // TODO: escaping of spaces / newlines
-            assert!(!key.contains(' ') && !key.contains('\n'));
-            assert!(!val.contains(' ') && !val.contains('\n'));
-            key + " " + &val
-        })
-        .collect::<Vec<_>>();
-    writeln!(writer, "{}", key_val_pairs.join(" "))?;
+    let initial_state = serialize_initial_state(initial_state);
+    writeln!(writer, "{initial_state}")?;
     writeln!(writer, "{num_players}")?;
     for (index, player) in log.log.into_iter() {
         writeln!(writer, "{index}{PLAYER_SEPARATOR}{player}")?;
@@ -219,24 +243,8 @@ pub fn parse_saved_game<R: BufRead, H: AsRef<str>>(
 
     // read initial state
     next_line(&mut line, &mut curr_line)?;
-    let initial_state = {
-        let mut key_val_pairs = Vec::new();
-        let mut it = line.split_ascii_whitespace().peekable();
-        loop {
-            match (it.next(), it.next()) {
-                (Some(key), Some(val)) => key_val_pairs.push((key.to_string(), val.to_string())),
-                (None, None) => break,
-                (_, None) => {
-                    return Err(LoadGameError::from_file(
-                        curr_line,
-                        "Uneven number of key-value entries",
-                    ))
-                }
-                _ => unreachable!(),
-            }
-        }
-        key_val_pairs
-    };
+    let initial_state =
+        deserialize_initial_state(&line).map_err(|msg| LoadGameError::from_file(curr_line, msg))?;
 
     // read number of players
     next_line(&mut line, &mut curr_line)?;
@@ -283,8 +291,7 @@ pub fn parse_saved_game<R: BufRead, H: AsRef<str>>(
     Ok((initial_state, num_players, result))
 }
 
-/// Loads the game state via the provided reader and a function to interpret the key-value pairs
-/// representing the initial state.
+/// Loads the game state via a function providing the initial state
 pub fn restore_game_state<T: GameData, F>(
     num_players: usize,
     create_data: F,
