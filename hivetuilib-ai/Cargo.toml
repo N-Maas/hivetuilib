@@ -1,5 +1,5 @@
 [package]
-name = "tgp-board"
+name = "hivetuilib-ai"
 version = "0.1.0"
 authors = ["Nikolai Maas <nikolai.maas@mailbox.org>"]
 edition = "2021"
@@ -7,5 +7,4 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-arrayvec = "0.7"
-hashbrown = "0.11"
+hivetuilib = { path = "../hivetuilib" }

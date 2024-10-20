@@ -20,7 +20,7 @@ pub(crate) mod test {
         rater::{DecisionType, Rater},
         RateAndMap, RatingType,
     };
-    use tgp::{plain_decision::PlainDecision, GameData, RevEffect};
+    use hivetuilib::{plain_decision::PlainDecision, GameData, RevEffect};
 
     pub(crate) fn type_mapping(context: &ZeroOneContext) -> DecisionType {
         match context {
@@ -81,7 +81,7 @@ pub(crate) mod test {
         type Context = ZeroOneContext;
         type EffectType = dyn RevEffect<Self>;
 
-        fn next_decision(&self) -> Option<Box<dyn tgp::Decision<Self>>> {
+        fn next_decision(&self) -> Option<Box<dyn hivetuilib::Decision<Self>>> {
             if self.num_zeros + self.num_ones >= self.finished_at {
                 return None;
             }

@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, marker::PhantomData, ops::ControlFlow};
 
-use tgp::{
+use hivetuilib::{
     engine::{logging::EventLog, CloneError, Engine, EventListener},
     GameData, RevEffect,
 };
@@ -164,7 +164,7 @@ where
         let (_, index_list, _) = self.run(engine).expect("Invalid engine state!");
         for &i in index_list.iter() {
             match engine.pull() {
-                tgp::engine::GameState::PendingDecision(dec) => dec.select_option(i),
+                hivetuilib::engine::GameState::PendingDecision(dec) => dec.select_option(i),
                 _ => panic!("{}", INTERNAL_ERROR),
             }
         }
@@ -224,6 +224,7 @@ where
         if engine.is_finished() {
             return Err(MinMaxError::Finished);
         }
+        // let now = Instant::now();
         let mut engine = engine.try_clone_with_listener(EventLog::new())?;
 
         self.params.integrity_check();
@@ -609,7 +610,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use tgp::engine::{Engine, GameState};
+    use hivetuilib::engine::{Engine, GameState};
 
     use crate::{
         engine_stepper::EngineStepper,

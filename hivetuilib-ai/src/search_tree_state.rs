@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, mem, ops::ControlFlow};
 
-use tgp::{GameData, RevEffect};
+use hivetuilib::{GameData, RevEffect};
 
 use crate::{engine_stepper::EngineStepper, IndexType, RatingType, INTERNAL_ERROR};
 
@@ -290,7 +290,7 @@ impl SearchTreeState {
 mod test {
     use std::ops::ControlFlow;
 
-    use tgp::engine::Engine;
+    use hivetuilib::engine::Engine;
 
     use crate::{
         engine_stepper::EngineStepper,

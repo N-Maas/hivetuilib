@@ -1,6 +1,6 @@
 use std::{cmp::Ord, convert::TryFrom, slice};
 
-use tgp::{
+use hivetuilib::{
     engine::{Engine, EventListener, GameState, PendingDecision},
     GameData,
 };
@@ -421,7 +421,7 @@ fn pull_decision<'a, T: GameData, L: EventListener<T>>(
 
 #[cfg(test)]
 mod test {
-    use tgp::engine::Engine;
+    use hivetuilib::engine::Engine;
 
     use crate::{
         rater::translate,

@@ -2,7 +2,7 @@
 resolver = "2"
 
 members = [
-    "tgp",
-    "tgp-board",
-    "tgp-ai"
+    "hivetuilib",
+    "hivetuilib-board",
+    "hivetuilib-ai"
 ]

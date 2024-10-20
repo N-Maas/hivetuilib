@@ -1,6 +1,6 @@
 use std::fmt::{self, Debug};
 
-use tgp::{
+use hivetuilib::{
     engine::{logging::EventLog, Engine, GameState},
     GameData, RevEffect,
 };
@@ -104,7 +104,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use tgp::engine::Engine;
+    use hivetuilib::engine::Engine;
 
     use crate::{engine_stepper::EngineStepper, test::ZeroOneGame};
 
